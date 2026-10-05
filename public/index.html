@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VIRAJ INTERNATIONAL SCHOOL — Digital Knowledge & Library Hub</title>
+  
+  <!-- Academic & Modern Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+</head>
+<body class="theme-light">
+
+  <!-- Main Academic Navigation Bar -->
+  <header class="navbar-header" id="navbarHeader">
+    <div class="nav-container">
+      
+      <!-- Brand Crest & Title -->
+      <div class="nav-brand" onclick="go('home')" role="button" tabindex="0" title="Viraj International School Library Home">
+        <img class="brand-crest" src="logo.svg" alt="Viraj International School Crest">
+        <div class="brand-info">
+          <span class="brand-school">VIRAJ INTERNATIONAL SCHOOL</span>
+          <span class="brand-tagline">Digital Knowledge & Library Hub</span>
+        </div>
+      </div>
+
+      <!-- Desktop Navigation Links -->
+      <nav class="nav-menu" id="navMenu">
+        <button class="nav-item" data-view="home" onclick="go('home')">Home</button>
+        <button class="nav-item" data-view="junior" onclick="go('junior')">Junior Wing</button>
+        <button class="nav-item" data-view="secondary" onclick="go('secondary')">Secondary Wing</button>
+        <button class="nav-item" data-view="biography" onclick="go('biography')">Biographies</button>
+        <button class="nav-item" data-view="quiz" onclick="go('quiz')">Quiz Arena</button>
+        <button class="nav-item" data-view="news" onclick="go('news')">Newspaper</button>
+        
+        <!-- More Dropdown Menu -->
+        <div class="nav-dropdown-wrapper">
+          <button class="nav-item nav-dropdown-btn" id="moreDropdownBtn" onclick="toggleDropdown('moreDropdownMenu')">
+            More <span class="drop-arrow">▾</span>
+          </button>
+          <div class="dropdown-popover" id="moreDropdownMenu" hidden>
+            <button class="dropdown-item" onclick="go('suggest'); closeDropdowns();">
+              <span class="d-icon">💡</span> Suggest a Book
+            </button>
+            <button class="dropdown-item" onclick="go('elect'); closeDropdowns();">
+              <span class="d-icon">🗳️</span> Vote for the Next Book
+            </button>
+            <button class="dropdown-item" onclick="go('avid'); closeDropdowns();">
+              <span class="d-icon">🏆</span> Avid Reader of the Month
+            </button>
+            <button class="dropdown-item" onclick="go('history'); closeDropdowns();">
+              <span class="d-icon">🕒</span> Reading History
+            </button>
+            <button class="dropdown-item" onclick="go('about'); closeDropdowns();">
+              <span class="d-icon">🏛️</span> About the Library
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Global Search & Actions -->
+      <div class="nav-actions">
+        <!-- Quick Search Bar -->
+        <div class="global-search-box">
+          <span class="search-glass-icon">🔍</span>
+          <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Search books, authors, topics..." oninput="handleGlobalSearch(this.value)" autocomplete="off">
+          <div class="search-results-dropdown" id="searchResultsDropdown" hidden></div>
+        </div>
+
+        <!-- Theme Toggle -->
+        <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Theme" aria-label="Toggle Theme">
+          <span id="themeToggleIcon">🌙</span>
+        </button>
+
+        <!-- Guest State Actions -->
+        <div class="guest-actions" id="guestActions">
+          <button class="btn btn-sm btn-ghost" onclick="go('auth', 'login')">Log In</button>
+          <button class="btn btn-sm btn-gold" onclick="go('auth', 'signup')">Join Hub</button>
+        </div>
+
+        <!-- Logged-in User Profile Dropdown -->
+        <div class="user-profile-wrapper" id="userProfileWrapper" hidden>
+          <button class="user-profile-btn" id="userProfileBtn" onclick="toggleDropdown('userDropdownMenu')" aria-label="User Account Menu">
+            <div class="user-avatar-circle" id="navUserAvatar">S</div>
+            <div class="user-meta-text">
+              <span class="user-display-name" id="navUserName">Student</span>
+              <span class="user-role-label" id="navUserRole">Scholar</span>
+            </div>
+            <span class="drop-arrow">▾</span>
+          </button>
+          
+          <div class="dropdown-popover user-dropdown" id="userDropdownMenu" hidden>
+            <div class="user-dropdown-header">
+              <strong id="dropdownUserFullname">Student Name</strong>
+              <small id="dropdownUserGrade">Grade 8</small>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" onclick="go('profile'); closeDropdowns();">
+              <span>👤</span> Reading Passport & Profile
+            </button>
+            <button class="dropdown-item" onclick="go('bookmarks'); closeDropdowns();">
+              <span>🔖</span> Saved Bookmarks
+            </button>
+            <button class="dropdown-item" onclick="go('history'); closeDropdowns();">
+              <span>📚</span> My Reading History
+            </button>
+            <div id="librarianMenuSection" hidden>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-section-title">ADMINISTRATION</div>
+              <button class="dropdown-item dropdown-admin-item" onclick="go('admin'); closeDropdowns();">
+                <span>🛡️</span> Librarian Management Hub
+              </button>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item text-danger" onclick="logout(); closeDropdowns();">
+              <span>🚪</span> Log Out
+            </button>
+          </div>
+        </div>
+
+        <!-- Mobile Hamburger Button -->
+        <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()" aria-label="Open Navigation Menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+
+    </div>
+
+    <!-- Mobile Drawer Navigation -->
+    <div class="mobile-drawer" id="mobileDrawer" hidden>
+      <div class="mobile-drawer-content">
+        <button class="mobile-nav-link" onclick="go('home'); toggleMobileMenu();">🏠 Home</button>
+        <button class="mobile-nav-link" onclick="go('junior'); toggleMobileMenu();">🧸 Junior Library</button>
+        <button class="mobile-nav-link" onclick="go('secondary'); toggleMobileMenu();">📚 Secondary Library</button>
+        <button class="mobile-nav-link" onclick="go('biography'); toggleMobileMenu();">👑 Biographies</button>
+        <button class="mobile-nav-link" onclick="go('quiz'); toggleMobileMenu();">🧠 Test Your Wits</button>
+        <button class="mobile-nav-link" onclick="go('news'); toggleMobileMenu();">📰 Daily Newspapers</button>
+        <button class="mobile-nav-link" onclick="go('suggest'); toggleMobileMenu();">💡 Suggest a Book</button>
+        <button class="mobile-nav-link" onclick="go('elect'); toggleMobileMenu();">🗳️ Vote for the Next Book</button>
+        <button class="mobile-nav-link" onclick="go('avid'); toggleMobileMenu();">🏆 Avid Reader of the Month</button>
+        <button class="mobile-nav-link" onclick="go('history'); toggleMobileMenu();">🕒 Reading History</button>
+        <div id="mobileAdminLink" hidden>
+          <button class="mobile-nav-link mobile-admin-link" onclick="go('admin'); toggleMobileMenu();">🛡️ Librarian Hub</button>
+        </div>
+        <button class="mobile-nav-link text-danger" onclick="logout(); toggleMobileMenu();" id="mobileLogoutBtn" hidden>🚪 Log Out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Dynamic Application Main Container -->
+  <main id="app" class="site-main"></main>
+
+  <!-- Interactive Document / Media Reader Modal -->
+  <div id="previewModal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <div class="modal-title-box">
+          <span class="modal-icon" id="previewIcon">📖</span>
+          <div>
+            <h3 id="previewTitle">Digital Resource Reader</h3>
+            <span class="modal-sub-meta" id="previewMeta">Viraj International School Digital Repository</span>
+          </div>
+        </div>
+        <button id="closeModalBtn" class="modal-close-btn" type="button" aria-label="Close Preview" title="Close Preview">✕</button>
+      </div>
+      
+      <div class="modal-body" id="previewBody"></div>
+      
+      <div class="modal-foot">
+        <div id="previewFootActions"></div>
+        <button id="footCloseBtn" class="btn btn-ghost" type="button">Close Window</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Alert Stack -->
+  <div id="toastContainer" class="toast-stack" aria-live="polite"></div>
+
+  <!-- Academic Footer -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-grid">
+        <!-- Brand Column -->
+        <div class="footer-col footer-col-brand">
+          <div class="footer-logo-row">
+            <img src="logo.svg" alt="Viraj International School Crest" class="footer-crest">
+            <div>
+              <h4 class="footer-school-title">VIRAJ INTERNATIONAL SCHOOL</h4>
+              <p class="footer-tagline">Digital Knowledge & Library Hub</p>
+            </div>
+          </div>
+          <p class="footer-desc">
+            Empowering students with comprehensive digital literature, curriculum encyclopedias, audio learning, daily newspapers, and interactive knowledge challenges.
+          </p>
+          <div class="footer-pillars">
+            <span class="pillar-badge">Excellence</span>
+            <span class="pillar-badge">Integrity</span>
+            <span class="pillar-badge">Curiosity</span>
+            <span class="pillar-badge">Wisdom</span>
+          </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="footer-col">
+          <h5 class="footer-heading">Library Wings</h5>
+          <ul class="footer-links">
+            <li><a href="javascript:void(0)" onclick="go('junior')">Junior Library (Primary)</a></li>
+            <li><a href="javascript:void(0)" onclick="go('secondary')">Secondary Academic Wing</a></li>
+            <li><a href="javascript:void(0)" onclick="go('biography')">Biographies & Great Minds</a></li>
+            <li><a href="javascript:void(0)" onclick="go('quiz')">Test Your Wits Arena</a></li>
+            <li><a href="javascript:void(0)" onclick="go('news')">Daily Newspapers & Campus Press</a></li>
+          </ul>
+        </div>
+
+        <!-- Reading Community -->
+        <div class="footer-col">
+          <h5 class="footer-heading">Reading Community</h5>
+          <ul class="footer-links">
+            <li><a href="javascript:void(0)" onclick="go('avid')">Avid Readers of the Month</a></li>
+            <li><a href="javascript:void(0)" onclick="go('elect')">Vote for the Next Book</a></li>
+            <li><a href="javascript:void(0)" onclick="go('suggest')">Suggest a Book</a></li>
+            <li><a href="javascript:void(0)" onclick="go('profile')">Student Reading Passport</a></li>
+            <li><a href="javascript:void(0)" onclick="go('about')">Library Rules & Mission</a></li>
+          </ul>
+        </div>
+
+        <!-- Contact & Accreditation -->
+        <div class="footer-col">
+          <h5 class="footer-heading">Library Desk</h5>
+          <p class="footer-contact-item">📍 Viraj International School Campus</p>
+          <p class="footer-contact-item">📧 library@virajis.edu.in</p>
+          <p class="footer-contact-item">⏰ Mon – Sat: 8:00 AM – 5:00 PM</p>
+          <div class="footer-safe-badge">
+            <span>🛡️ Safe Student Digital Learning Environment</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <p>© 2026 Viraj International School. All Rights Reserved. Digital Knowledge & Library Hub.</p>
+        <div class="footer-legal">
+          <a href="javascript:void(0)" onclick="go('about')">Privacy Policy</a>
+          <span>•</span>
+          <a href="javascript:void(0)" onclick="go('about')">Terms of Use</a>
+          <span>•</span>
+          <a href="javascript:void(0)" onclick="go('about')">Academic Ethics</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

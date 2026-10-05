@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 340" width="100%" height="100%">
+  <defs>
+    <linearGradient id="flameGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#ea580c"/>
+      <stop offset="50%" stop-color="#f59e0b"/>
+      <stop offset="100%" stop-color="#fbbf24"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1d4ed8"/>
+      <stop offset="100%" stop-color="#1e3a8a"/>
+    </linearGradient>
+    <linearGradient id="bookGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Top Flame -->
+  <g id="flame" filter="url(#glow)">
+    <path d="M150 20 C140 45 125 65 120 85 C115 105 125 128 140 142 C135 125 140 105 150 90 C155 105 160 118 158 132 C168 122 178 108 178 88 C178 62 162 40 150 20 Z" fill="url(#flameGrad)"/>
+    <path d="M150 48 C145 62 136 76 135 90 C135 102 142 114 148 122 C146 112 148 100 154 90 C158 100 162 108 162 118 C168 110 172 98 170 85 C168 68 158 58 150 48 Z" fill="#fef08a" opacity="0.85"/>
+  </g>
+
+  <!-- Left Laurel Wreath -->
+  <g id="left-wreath" fill="#16a34a">
+    <!-- Leaves sweeping up from bottom-left to top-center -->
+    <path d="M85 245 C78 238 68 238 62 245 C68 252 78 252 85 245 Z"/>
+    <path d="M68 230 C58 222 48 225 44 234 C52 238 62 238 68 230 Z"/>
+    <path d="M52 208 C40 200 32 205 30 216 C38 220 48 217 52 208 Z"/>
+    <path d="M40 182 C28 174 20 182 20 194 C29 196 38 190 40 182 Z"/>
+    <path d="M34 154 C22 148 16 158 18 170 C27 170 34 163 34 154 Z"/>
+    <path d="M34 125 C24 120 20 132 24 144 C33 142 37 133 34 125 Z"/>
+    <path d="M42 98 C33 94 30 106 36 117 C44 114 47 104 42 98 Z"/>
+    <path d="M56 74 C48 70 47 83 55 93 C63 88 63 78 56 74 Z"/>
+    <path d="M76 56 C68 52 70 65 80 73 C87 67 85 58 76 56 Z"/>
+    <path d="M102 44 C95 40 98 52 110 58 C115 51 111 44 102 44 Z"/>
+    <!-- Stem curve -->
+    <path d="M92 258 C45 220 25 150 96 52" fill="none" stroke="#15803d" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Right Laurel Wreath -->
+  <g id="right-wreath" fill="#16a34a">
+    <!-- Leaves sweeping up from bottom-right to top-center -->
+    <path d="M215 245 C222 238 232 238 238 245 C232 252 222 252 215 245 Z"/>
+    <path d="M232 230 C242 222 252 225 256 234 C248 238 238 238 232 230 Z"/>
+    <path d="M248 208 C260 200 268 205 270 216 C262 220 252 217 248 208 Z"/>
+    <path d="M260 182 C272 174 280 182 280 194 C271 196 262 190 260 182 Z"/>
+    <path d="M266 154 C278 148 284 158 282 170 C273 170 266 163 266 154 Z"/>
+    <path d="M266 125 C276 120 280 132 276 144 C267 142 263 133 266 125 Z"/>
+    <path d="M258 98 C267 94 270 106 264 117 C256 114 253 104 258 98 Z"/>
+    <path d="M244 74 C252 70 253 83 245 93 C237 88 237 78 244 74 Z"/>
+    <path d="M224 56 C232 52 230 65 220 73 C213 67 215 58 224 56 Z"/>
+    <path d="M198 44 C205 40 202 52 190 58 C185 51 189 44 198 44 Z"/>
+    <!-- Stem curve -->
+    <path d="M208 258 C255 220 275 150 204 52" fill="none" stroke="#15803d" stroke-width="3.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Center Pen-Nib Shield -->
+  <g id="shield">
+    <!-- Outer Shield Silhouette -->
+    <path d="M92 118 L145 178 L145 204 A12 12 0 0 0 145 228 A12 12 0 0 0 155 228 A12 12 0 0 0 155 204 L155 178 L208 118 L202 215 C198 245 170 268 150 278 C130 268 102 245 98 215 Z" fill="url(#shieldGrad)" stroke="#1e3a8a" stroke-width="1.5"/>
+    <!-- Pen Nib Cutout Slit & Circle -->
+    <path d="M146 172 L154 172 L154 212 L146 212 Z" fill="#ffffff"/>
+    <circle cx="150" cy="216" r="10.5" fill="#ffffff"/>
+  </g>
+
+  <!-- Bottom Open Book Pages -->
+  <g id="book" fill="url(#bookGrad)" stroke="#172554" stroke-width="1.2">
+    <!-- Top Layer Left & Right Pages -->
+    <path d="M150 286 C125 272 80 272 52 284 L56 295 C82 284 125 284 150 297 Z"/>
+    <path d="M150 286 C175 272 220 272 248 284 L244 295 C218 284 175 284 150 297 Z"/>
+    
+    <!-- Middle Layer Pages -->
+    <path d="M150 299 C125 287 75 287 45 301 L49 311 C78 299 125 299 150 310 Z"/>
+    <path d="M150 299 C175 287 225 287 255 301 L251 311 C222 299 175 299 150 310 Z"/>
+
+    <!-- Bottom Thickest Cover Curve -->
+    <path d="M150 312 C120 302 65 304 38 319 L44 330 C72 315 122 313 150 324 Z"/>
+    <path d="M150 312 C180 302 235 304 262 319 L256 330 C228 315 178 313 150 324 Z"/>
+    
+    <!-- Central Spine Joint -->
+    <circle cx="150" cy="324" r="5" fill="#1e3a8a" stroke="#fbbf24" stroke-width="2"/>
+  </g>
+</svg>
