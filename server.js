@@ -1,8 +1,25 @@
 const express = require('express'), session = require('express-session'), bcrypt = require('bcryptjs'),
-  { DatabaseSync: Database } = require('node:sqlite'), multer = require('multer'), fs = require('fs');
+  { DatabaseSync: Database } = require('node:sqlite'), multer = require('multer'), fs = require('fs'),
+  path = require('path'), os = require('os');
 
-fs.mkdirSync('uploads', { recursive: true });
-const db = new Database('library.db');
+const isVercel = Boolean(process.env.VERCEL);
+const uploadDir = isVercel ? path.join(os.tmpdir(), 'uploads') : path.join(__dirname, 'uploads');
+try { fs.mkdirSync(uploadDir, { recursive: true }); } catch (e) {}
+
+let dbPath = path.join(__dirname, 'library.db');
+if (isVercel) {
+  const tmpDbPath = path.join(os.tmpdir(), 'library.db');
+  try {
+    if (fs.existsSync(dbPath) && !fs.existsSync(tmpDbPath)) {
+      fs.copyFileSync(dbPath, tmpDbPath);
+    }
+  } catch (e) {
+    console.error('Error copying db to tmp:', e);
+  }
+  dbPath = tmpDbPath;
+}
+
+const db = new Database(dbPath);
 
 // Enable WAL mode & foreign keys if supported
 try { db.exec('PRAGMA foreign_keys = ON;'); } catch(e){}
@@ -242,7 +259,7 @@ if (db.prepare('select count(*) as c from readers').get().c === 0) {
 }
 
 // Express App Configuration
-const app = express(), upload = multer({ dest: 'uploads/' }), WEEK = 7 * 864e5;
+const app = express(), upload = multer({ dest: uploadDir }), WEEK = 7 * 864e5;
 app.use(express.json());
 app.use(session({
   secret: process.env.SESSION_SECRET || 'viraj-international-school-secret-key-2026',
@@ -570,12 +587,15 @@ app.get('/api/admin/users', lib, (q, s) => {
 });
 
 // Static assets
-app.use('/uploads', need, express.static('uploads'));
-app.use(express.static('public'));
+app.use('/uploads', need, express.static(uploadDir));
+if (isVercel && fs.existsSync(path.join(__dirname, 'uploads'))) {
+  app.use('/uploads', need, express.static(path.join(__dirname, 'uploads')));
+}
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Fallback to index.html for client-side routing
 app.get('*', (q, s) => {
-  s.sendFile('public/index.html', { root: __dirname });
+  s.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;

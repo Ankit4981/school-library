@@ -1,4 +1,13 @@
-{"name":"school-digital-library","version":"1.0.0","main":"server.js","scripts":{"start":"node server.js"},
+{
+  "name": "school-digital-library",
+  "version": "1.0.0",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22.x"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
