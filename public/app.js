@@ -46,7 +46,7 @@ let appState = {
 
 // Category Mappings
 const JUNIOR_CATS = ['All', 'Nursery Rhymes', 'Short Stories', 'Flip Books', 'Audio'];
-const SECONDARY_CATS = ['All', 'Academics', 'Comics', 'Novels', 'Encyclopedias', 'Audio Books'];
+const SECONDARY_CATS = ['All', 'Goosebumps & Horror', 'Novels', 'Comics', 'Academics', 'Encyclopedias', 'Audio Books'];
 const BIO_CATS = ['All', 'Scientists', 'Inventors', 'Leaders', 'Indian Personalities', 'Global Personalities'];
 
 // Role Check Helper
@@ -234,11 +234,20 @@ function openPreview(title, fileUrl, metaInfo = 'Viraj Digital Library Resource'
         <img src="${fileUrl}" alt="${esc(title)}" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:var(--radius-md);box-shadow:var(--shadow-sm);">
       </div>`;
     pFoot.innerHTML = `<a href="${fileUrl}" target="_blank" download class="btn btn-sm btn-ghost">📥 Download High-Res Image</a>`;
+  } else if (fileUrl.match(/\.html$/i) || fileUrl.includes('/books/')) {
+    pIcon.textContent = '🎃';
+    pBody.innerHTML = `
+      <iframe src="${fileUrl}" style="width:100%;height:75vh;min-height:550px;border:none;border-radius:var(--radius-md);background:var(--bg-surface);" title="${esc(title)}"></iframe>`;
+
+    pFoot.innerHTML = `
+      <div style="display:flex;gap:10px;align-items:center;">
+        <a href="${fileUrl}" target="_blank" class="btn btn-sm btn-gold">⛶ Open Dedicated Fullscreen Reader</a>
+      </div>`;
   } else if (fileUrl.match(/\.pdf$/i)) {
     pIcon.textContent = '📕';
     pBody.innerHTML = `
       <iframe src="${fileUrl}" style="width:100%;min-height:520px;border:none;border-radius:var(--radius-md);" title="${esc(title)}"></iframe>`;
-    pFoot.innerHTML = `<a href="${fileUrl}" target="_blank" download class="btn btn-sm btn-gold">📥 Open Full Screen / Download PDF</a>`;
+    pFoot.innerHTML = `<a href="${fileUrl}" target="_blank" class="btn btn-sm btn-gold">⛶ Open Full Screen</a>`;
   } else {
     pIcon.textContent = '📖';
     pBody.innerHTML = `
@@ -288,20 +297,20 @@ function initModal() {
 
 // User Interaction Tracker & Reader Launcher
 async function openItem(id, sec, title, file, author) {
-  if (!user) {
-    showToast('Please log in to read or bookmark digital books.', 'info');
-    go('auth', 'login');
-    return;
-  }
-
-  try {
-    await api('use', 'POST', { kind: sec, title });
-  } catch (e) {
-    console.warn('Log usage error:', e);
+  if (user) {
+    try {
+      await api('use', 'POST', { kind: sec, title });
+    } catch (e) {
+      console.warn('Log usage error:', e);
+    }
+  } else {
+    showToast('Reading as Guest Scholar. Log in anytime to save your Reading Passport! 🔖', 'info');
   }
 
   if (file) {
-    openPreview(title, '/uploads/' + file, `${author} • ${sec.toUpperCase()}`);
+    const isHtml = file.endsWith('.html');
+    const targetUrl = isHtml ? `/books/${file}` : `/uploads/${file}`;
+    openPreview(title, targetUrl, `${author} • ${sec.toUpperCase()} LIBRARY`);
   } else {
     openPreview(title, '#', `${author} • Digital Reading Hub`);
     const pBody = $('#previewBody');
@@ -380,13 +389,34 @@ async function handleGlobalSearch(query) {
   }
 }
 
+// Authentic Book Cover Artwork Registry
+const BOOK_COVERS = {
+  'Goosebumps #19: Deep Trouble': '/covers/deep-trouble.jpg',
+  'Goosebumps #22: Ghost Beach': '/covers/ghost-beach.jpg',
+  'Goosebumps #21: Go Eat Worms!': '/covers/go-eat-worms.jpg',
+  'Goosebumps #18: Monster Blood II': '/covers/monster-blood-2.jpg',
+  'Goosebumps #16: One Day at HorrorLand': '/covers/one-day-at-horrorland.jpg'
+};
+
 // Realistic Digital Book Card Renderer
 function renderBookCard(book) {
   const isSaved = book.isBookmarked || false;
   let coverClass = 'cover-secondary';
   let typeIcon = '📖';
 
-  if (book.section === 'junior') coverClass = 'cover-junior';
+  const isGoosebumps = Boolean(book.title && (book.title.includes('Goosebumps') || (book.author && book.author.includes('Stine'))));
+  const customCover = BOOK_COVERS[book.title] || (isGoosebumps ? (
+    book.title.includes('Deep Trouble') ? '/covers/deep-trouble.jpg' :
+    book.title.includes('Ghost Beach') ? '/covers/ghost-beach.jpg' :
+    book.title.includes('Go Eat Worms') ? '/covers/go-eat-worms.jpg' :
+    book.title.includes('Monster Blood') ? '/covers/monster-blood-2.jpg' :
+    book.title.includes('HorrorLand') ? '/covers/one-day-at-horrorland.jpg' : null
+  ) : null);
+
+  if (isGoosebumps) {
+    coverClass = 'cover-goosebumps';
+    typeIcon = '🎃';
+  } else if (book.section === 'junior') coverClass = 'cover-junior';
   else if (book.section === 'biography') coverClass = 'cover-biography';
   else if (book.category === 'Comics') coverClass = 'cover-comic';
   else if (book.category === 'Audio Books' || book.content_type === 'audio') coverClass = 'cover-audio';
@@ -397,11 +427,11 @@ function renderBookCard(book) {
   else if (book.content_type === 'comic') typeIcon = '🎨';
 
   return `
-    <div class="book-card">
-      <div class="book-cover-wrap ${coverClass}">
+    <div class="book-card ${isGoosebumps ? 'book-card-goosebumps' : ''}">
+      <div class="book-cover-wrap ${coverClass} ${customCover ? 'has-cover-art' : ''}" style="${customCover ? `background-image:url('${customCover}');` : ''}">
         <div class="book-cover-spine"></div>
         <div class="book-cover-top">
-          <span class="book-type-badge">${typeIcon} ${esc(book.category || 'General')}</span>
+          <span class="book-type-badge">${typeIcon} ${isGoosebumps ? 'Goosebumps' : esc(book.category || 'General')}</span>
           <button class="bookmark-heart-btn bm-btn-${book.id} ${isSaved ? 'is-saved' : ''}" 
             title="${isSaved ? 'Remove from Saved' : 'Bookmark this book'}" 
             onclick="toggleBookmark(${book.id}, event)">
@@ -417,14 +447,15 @@ function renderBookCard(book) {
           <div class="book-meta-row">
             <span class="meta-chip">🎓 ${esc(book.grade || 'All Grades')}</span>
             <span class="meta-chip">⏱ ${esc(book.read_time || '10 min')}</span>
+            ${isGoosebumps ? '<span class="meta-chip meta-chip-hot">🔥 Full Novel</span>' : ''}
           </div>
           <p class="book-desc-snippet">${esc(book.description || 'Comprehensive digital reading resource for students and teachers.')}</p>
         </div>
 
         <div class="book-action-footer">
-          <button class="btn btn-sm btn-gold" style="width:100%;" 
+          <button class="btn btn-sm ${isGoosebumps ? 'btn-green' : 'btn-gold'}" style="width:100%;" 
             onclick="openItem(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}')">
-            ${book.content_type === 'audio' ? '🎧 Listen Now' : '📖 Read Now'}
+            ${book.content_type === 'audio' ? '🎧 Listen Now' : (isGoosebumps ? '📖 Read Full Book' : '📖 Read Now')}
           </button>
         </div>
       </div>
@@ -438,6 +469,7 @@ const views = {
   // 1. HOME VIEW (EXACT 11-PART SEQUENCE)
   async home() {
     const allItems = await api('items');
+    const goosebumpsBooks = allItems.filter(b => b.title && b.title.includes('Goosebumps'));
     
     // Balanced diverse featured books across all wings (Junior, Novel, Comic, Biography)
     const featuredJunior = allItems.find(b => b.section === 'junior' && b.category === 'Short Stories') || allItems.find(b => b.section === 'junior');
@@ -486,22 +518,59 @@ const views = {
       <!-- 1. Hero Section -->
       <section class="library-hero">
         <div class="hero-left">
-          <div class="hero-sub-badge">🏛️ Viraj International School</div>
-          <h1 class="hero-heading">Digital Knowledge & Library Hub</h1>
-          <p class="hero-motto">“Discover. Read. Learn. Participate.”</p>
+          <div class="hero-sub-badge">
+            <span class="hero-live-dot"></span>
+            <span>VIRAJ INTERNATIONAL SCHOOL • 24/7 DIGITAL HUB</span>
+          </div>
+          <h1 class="hero-heading">Digital Knowledge & <span class="hero-gold-text">Library Hub</span></h1>
+          <p class="hero-motto">“Discover. Read. Learn. Participate. — Empowering Young Minds Every Day.”</p>
+          
           <div class="hero-buttons">
             <button class="btn btn-gold btn-lg" onclick="go('secondary')">📚 Explore Library</button>
+            <button class="btn btn-green btn-lg" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">🎃 Goosebumps Series</button>
+            <button class="btn btn-ghost btn-lg" onclick="openRandomBook()" title="Pick a random book from the collection">🎲 Surprise Me!</button>
             ${!user ? `
-              <button class="btn btn-ghost btn-lg" onclick="go('auth', 'signup')">✨ Student / Member Sign Up</button>
+              <button class="btn btn-ghost btn-lg" onclick="go('auth', 'signup')">✨ Join Hub</button>
             ` : `
-              <button class="btn btn-ghost btn-lg" onclick="go('profile')">👤 My Reading Passport</button>
+              <button class="btn btn-ghost btn-lg" onclick="go('profile')">👤 Reading Passport</button>
             `}
+          </div>
+
+          <!-- Quick Trending Tags -->
+          <div class="hero-trending-row">
+            <span style="font-weight:700;color:#fef08a;">🔥 Trending:</span>
+            <span class="trending-pill" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">🎃 Goosebumps</span>
+            <span class="trending-pill" onclick="handleGlobalSearch('HorrorLand')">🎡 HorrorLand</span>
+            <span class="trending-pill" onclick="handleGlobalSearch('Sherlock')">🕵️ Sherlock Holmes</span>
+            <span class="trending-pill" onclick="handleGlobalSearch('Wings of Fire')">🚀 Wings of Fire</span>
+            <span class="trending-pill" onclick="appState.activeCategory='Comics';go('secondary')">🎨 Comics</span>
+            <span class="trending-pill" onclick="go('quiz')">🧠 Quiz Arena</span>
           </div>
         </div>
 
         <div class="hero-right-badge">
           <img src="logo.svg" alt="Viraj School Emblem" class="hero-crest-lg">
-          <div class="hero-stat-badge">24/7 DIGITAL REPOSITORY</div>
+          <span style="font-size:0.85rem;font-weight:800;letter-spacing:1px;color:#ffffff;">ACADEMIC HUB</span>
+          <small style="font-size:0.7rem;color:#cbd5e1;margin-bottom:8px;">Certified Knowledge Repository</small>
+          
+          <div class="hero-stat-grid">
+            <div class="hero-mini-stat">
+              <strong>${allItems.length}+</strong>
+              <span>E-Books</span>
+            </div>
+            <div class="hero-mini-stat">
+              <strong>5</strong>
+              <span>Goosebumps</span>
+            </div>
+            <div class="hero-mini-stat">
+              <strong>100%</strong>
+              <span>Digital Text</span>
+            </div>
+            <div class="hero-mini-stat">
+              <strong>🔊 Free</strong>
+              <span>Read-Aloud</span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -574,6 +643,43 @@ const views = {
           </div>
         </div>
       </section>
+
+      <!-- 4B. Special Collection: R.L. Stine's Goosebumps Series -->
+      ${goosebumpsBooks.length ? `
+      <section class="home-section goosebumps-banner-section">
+        <div class="goosebumps-banner-card">
+          <div class="gb-banner-content">
+            <div class="gb-tag-badge">🎃 EXCLUSIVE COMPLETE COLLECTION</div>
+            <h2 class="gb-banner-title">R.L. Stine's Goosebumps Classics</h2>
+            <p class="gb-banner-desc">
+              Five complete, unabridged childhood horror and mystery masterpieces are now live in the school library! Experience every chapter online with reading themes, font scaling, audio narration, and original PDF downloads.
+            </p>
+            <div class="gb-banner-actions">
+              <button class="btn btn-green btn-lg" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">
+                👻 Browse Goosebumps Series
+              </button>
+              <button class="btn btn-ghost btn-lg" onclick="openItem(${goosebumpsBooks[0].id}, 'secondary', '${esc(goosebumpsBooks[0].title).replace(/'/g, "\\'")}', '${esc(goosebumpsBooks[0].file)}', '${esc(goosebumpsBooks[0].author).replace(/'/g, "\\'")}')">
+                📖 Read Featured: ${esc(goosebumpsBooks[0].title.split(':')[1] || goosebumpsBooks[0].title).trim()}
+              </button>
+            </div>
+          </div>
+          <div class="gb-covers-preview-strip">
+            <img src="/covers/one-day-at-horrorland.jpg" alt="HorrorLand" class="gb-mini-cover" title="One Day at HorrorLand" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">
+            <img src="/covers/monster-blood-2.jpg" alt="Monster Blood II" class="gb-mini-cover" title="Monster Blood II" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">
+            <img src="/covers/deep-trouble.jpg" alt="Deep Trouble" class="gb-mini-cover" title="Deep Trouble" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">
+            <img src="/covers/go-eat-worms.jpg" alt="Go Eat Worms!" class="gb-mini-cover" title="Go Eat Worms!" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">
+            <img src="/covers/ghost-beach.jpg" alt="Ghost Beach" class="gb-mini-cover" title="Ghost Beach" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">
+          </div>
+        </div>
+
+        <div class="section-header-row">
+          <h3 class="section-title">🎃 Goosebumps Horror Classics (${goosebumpsBooks.length})</h3>
+          <span class="section-link" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">View In Secondary Wing →</span>
+        </div>
+        <div class="books-shelf-grid">
+          ${goosebumpsBooks.map(renderBookCard).join('')}
+        </div>
+      </section>` : ''}
 
       <!-- 5. Popular This Week -->
       <section class="home-section">

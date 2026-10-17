@@ -203,6 +203,34 @@ if (itemCount === 0 || itemCount < 15) {
   ins.run('biography', 'Leaders', 'Swami Vivekananda: Inspiring Vision for Youth', 'Ramakrishna Mission', 'Grades 7 - 12', '20 min read', 'biography', 'The awakening message of strength, education, and character building for young minds.', null, 0, 1, now - 3*864e5);
   ins.run('biography', 'Indian Personalities', 'Srinivasa Ramanujan: The Man Who Knew Infinity', 'Robert Kanigel Digest', 'Grades 8 - 12', '28 min read', 'biography', 'The pure mathematical genius whose formulas continue to unlock modern black hole physics.', null, 1, 1, now - 4*864e5);
   ins.run('biography', 'Global Personalities', 'Mahatma Gandhi: The Story of My Experiments with Truth', 'M.K. Gandhi Digest', 'Grades 7 - 12', '30 min read', 'biography', 'The monumental journey of non-violence, courage, and moral leadership that moved nations.', null, 0, 1, now - 5*864e5);
+
+  // Goosebumps Classics Series by R.L. Stine
+  ins.run('secondary', 'Novels', 'Goosebumps #19: Deep Trouble', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Billy Deep and his sister Sheena visit their marine biologist uncle Dr. D on the Caribbean research boat Cassandra. A real mermaid and a twelve-tentacled sea monster lead them into a dangerous rescue mission against greedy smugglers.', 'deep-trouble.html', 1, 1, now);
+  ins.run('secondary', 'Novels', 'Goosebumps #22: Ghost Beach', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Jerry and Terri Sadler spend summer in New England with cousins Brad and Agatha. Exploring a cliffside cave and an ancient graveyard, they uncover headstones bearing the names of their new playmates—and a terrifying 350-year-old secret.', 'ghost-beach.html', 1, 1, now - 864e5);
+  ins.run('secondary', 'Novels', 'Goosebumps #21: Go Eat Worms!', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Todd Barstow is an avid worm collector preparing his school science expo project. After slicing a live worm in half, worms mysteriously invade his cap, food, and bed—until a monstrous mother worm rises from the earth seeking revenge!', 'go-eat-worms.html', 1, 1, now - 2*864e5);
+  ins.run('secondary', 'Novels', 'Goosebumps #18: Monster Blood II', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Evan Ross thought the green Monster Blood was gone forever. But when bully Conan Barber torments him and he gets stuck on hamster duty, Andy feeds a spoonful of green slime to Cuddles the hamster—who expands into a 10-foot classroom terror!', 'monster-blood-2.html', 1, 1, now - 3*864e5);
+  ins.run('secondary', 'Novels', 'Goosebumps #16: One Day at HorrorLand', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'The Morris family takes an unexpected turn to HorrorLand, a scary theme park with the Doom Slide and Coffin Cruise. But the scares are dangerously real—the park is run by actual monsters filming for The Monster Channel!', 'one-day-at-horrorland.html', 1, 1, now - 4*864e5);
+}
+
+// Ensure Goosebumps series exists in catalog regardless of prior state
+const goosebumpsSeed = [
+  ['secondary', 'Novels', 'Goosebumps #19: Deep Trouble', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Billy Deep and his sister Sheena visit their marine biologist uncle Dr. D on the Caribbean research boat Cassandra. A real mermaid and a twelve-tentacled sea monster lead them into a dangerous rescue mission against greedy smugglers.', 'deep-trouble.html', 1, 1],
+  ['secondary', 'Novels', 'Goosebumps #22: Ghost Beach', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Jerry and Terri Sadler spend summer in New England with cousins Brad and Agatha. Exploring a cliffside cave and an ancient graveyard, they uncover headstones bearing the names of their new playmates—and a terrifying 350-year-old secret.', 'ghost-beach.html', 1, 1],
+  ['secondary', 'Novels', 'Goosebumps #21: Go Eat Worms!', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Todd Barstow is an avid worm collector preparing his school science expo project. After slicing a live worm in half, worms mysteriously invade his cap, food, and bed—until a monstrous mother worm rises from the earth seeking revenge!', 'go-eat-worms.html', 1, 1],
+  ['secondary', 'Novels', 'Goosebumps #18: Monster Blood II', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'Evan Ross thought the green Monster Blood was gone forever. But when bully Conan Barber torments him and he gets stuck on hamster duty, Andy feeds a spoonful of green slime to Cuddles the hamster—who expands into a 10-foot classroom terror!', 'monster-blood-2.html', 1, 1],
+  ['secondary', 'Novels', 'Goosebumps #16: One Day at HorrorLand', 'R.L. Stine', 'Grades 4 - 8', '45 min read', 'book', 'The Morris family takes an unexpected turn to HorrorLand, a scary theme park with the Doom Slide and Coffin Cruise. But the scares are dangerously real—the park is run by actual monsters filming for The Monster Channel!', 'one-day-at-horrorland.html', 1, 1]
+];
+
+for (const gb of goosebumpsSeed) {
+  const existing = db.prepare('select id from items where title=?').get(gb[2]);
+  if (!existing) {
+    db.prepare(`
+      insert into items(section, category, title, author, grade, read_time, content_type, description, file, featured, popular, at)
+      values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(...gb, Date.now());
+  } else {
+    db.prepare(`update items set file=?, description=?, content_type='book' where id=?`).run(gb[8], gb[7], existing.id);
+  }
 }
 
 // Seed Starter News / Gazette
@@ -355,7 +383,14 @@ app.get('/api/items', (q, s) => {
   const params = [];
 
   if (section) { sql += ' and section=?'; params.push(section); }
-  if (category && category !== 'All') { sql += ' and lower(category)=lower(?)'; params.push(category); }
+  if (category && category !== 'All') {
+    if (category.toLowerCase().includes('goosebumps')) {
+      sql += ' and (lower(category)="novels" and (lower(title) like "%goosebumps%" or lower(author) like "%stine%"))';
+    } else {
+      sql += ' and lower(category)=lower(?)';
+      params.push(category);
+    }
+  }
   if (grade && grade !== 'All') { sql += ' and grade like ?'; params.push(`%${grade}%`); }
   if (featured === '1') { sql += ' and featured=1'; }
   if (popular === '1') { sql += ' and popular=1'; }
@@ -587,9 +622,9 @@ app.get('/api/admin/users', lib, (q, s) => {
 });
 
 // Static assets
-app.use('/uploads', need, express.static(uploadDir));
+app.use('/uploads', express.static(uploadDir));
 if (isVercel && fs.existsSync(path.join(__dirname, 'uploads'))) {
-  app.use('/uploads', need, express.static(path.join(__dirname, 'uploads')));
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 }
 app.use(express.static(path.join(__dirname, 'public')));
 
