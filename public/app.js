@@ -19,8 +19,10 @@ const api = async (u, m = 'GET', b) => {
     headers: b && !(b instanceof FormData) ? { 'Content-Type': 'application/json' } : {},
     body: b instanceof FormData ? b : (b ? JSON.stringify(b) : undefined)
   });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error || 'Request failed. Please try again.');
+  const text = await r.text();
+  let d = {};
+  try { d = JSON.parse(text); } catch {}
+  if (!r.ok) throw new Error(d.error || `Request failed (${r.status})`);
   return d;
 };
 
@@ -102,7 +104,10 @@ function closeDropdowns() {
 }
 
 window.addEventListener('click', e => {
-  if (!e.target.closest('.nav-dropdown-wrapper') && !e.target.closest('.user-profile-wrapper') && !e.target.closest('.global-search-box')) {
+  if (!e.target.closest('.nav-dropdown-wrapper') && 
+      !e.target.closest('.user-profile-wrapper') && 
+      !e.target.closest('.global-search-box') && 
+      !e.target.closest('.nav-tool-wrapper')) {
     closeDropdowns();
   }
 });
@@ -158,6 +163,8 @@ async function go(view, sub) {
 async function boot() {
   initTheme();
   initModal();
+  FocusTimer.init();
+  init3DCardTilt();
 
   try {
     user = await api('me');
@@ -182,8 +189,8 @@ function updateNavAuthUI() {
   const mobileLogout = $('#mobileLogoutBtn');
 
   if (user) {
-    if (guestBox) guestBox.hidden = true;
-    if (userBox) userBox.hidden = false;
+    if (guestBox) { guestBox.hidden = true; guestBox.style.display = 'none'; }
+    if (userBox) { userBox.hidden = false; userBox.style.display = 'flex'; }
     if (navAvatar) navAvatar.textContent = (user.name || 'U')[0].toUpperCase();
     if (navName) navName.textContent = (user.name || 'Student').split(' ')[0];
     if (navRole) navRole.textContent = isLibrarian() ? 'Librarian 🛡️' : (user.grade || 'Scholar');
@@ -193,69 +200,232 @@ function updateNavAuthUI() {
     if (libSection) libSection.hidden = !isLibrarian();
     if (mobileAdmin) mobileAdmin.hidden = !isLibrarian();
     if (mobileLogout) mobileLogout.hidden = false;
+    const navAddBtn = $('#navAdminQuickBtn');
+    if (navAddBtn) navAddBtn.style.display = isLibrarian() ? 'inline-flex' : 'none';
+    const moreLibSection = $('#moreLibrarianSection');
+    if (moreLibSection) moreLibSection.style.display = isLibrarian() ? 'block' : 'none';
   } else {
-    if (guestBox) guestBox.hidden = false;
-    if (userBox) userBox.hidden = true;
+    if (guestBox) { guestBox.hidden = false; guestBox.style.display = 'flex'; }
+    if (userBox) { userBox.hidden = true; userBox.style.display = 'none'; }
     if (libSection) libSection.hidden = true;
     if (mobileAdmin) mobileAdmin.hidden = true;
     if (mobileLogout) mobileLogout.hidden = true;
+    const navAddBtn = $('#navAdminQuickBtn');
+    if (navAddBtn) navAddBtn.style.display = 'none';
+    const moreLibSection = $('#moreLibrarianSection');
+    if (moreLibSection) moreLibSection.style.display = 'none';
   }
 }
 
-// Global Modal Preview & Reader System
-function openPreview(title, fileUrl, metaInfo = 'Viraj Digital Library Resource') {
+// Global In-Site Digital Reader System (100% In-Site Experience)
+let readingTimerInterval = null;
+let readingSeconds = 0;
+
+function updateReadingTimerDisplay() {
+  const el = $('#readerTimerText');
+  if (!el) return;
+  const mins = Math.floor(readingSeconds / 60).toString().padStart(2, '0');
+  const secs = (readingSeconds % 60).toString().padStart(2, '0');
+  el.textContent = `${mins}:${secs}`;
+}
+
+function toggleReaderTheater() {
+  const card = $('#readerModalCard');
+  const btn = $('#theaterToggleBtn');
+  if (!card) return;
+  const isTheater = card.classList.toggle('is-theater-fullscreen');
+  if (btn) {
+    btn.innerHTML = isTheater ? '🗗' : '⛶';
+    btn.title = isTheater ? 'Exit Fullscreen' : 'Fullscreen Theater View';
+  }
+}
+
+function switchFolderView(folderId, mode) {
+  const iframe = $('#readerIframe');
+  const btnGrid = $('#btnFolderGrid');
+  const btnList = $('#btnFolderList');
+  if (!iframe) return;
+  iframe.src = `https://drive.google.com/embeddedfolderview?id=${folderId}#${mode}`;
+  if (btnGrid) btnGrid.classList.toggle('is-active', mode === 'grid');
+  if (btnList) btnList.classList.toggle('is-active', mode === 'list');
+}
+
+function openPreview(title, fileUrl, metaInfo = 'Viraj Digital Library Resource', bookId = null, isRented = false) {
   const modal = $('#previewModal');
   const pTitle = $('#previewTitle');
   const pIcon = $('#previewIcon');
   const pMeta = $('#previewMeta');
   const pBody = $('#previewBody');
   const pFoot = $('#previewFootActions');
+  const rentalBadge = $('#previewRentalBadge');
   if (!modal || !pBody) return;
 
   pTitle.textContent = title;
   pMeta.textContent = metaInfo;
+  if (rentalBadge) {
+    rentalBadge.style.display = isRented ? 'inline-flex' : 'none';
+  }
 
-  if (fileUrl.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+  // Reset timer
+  clearInterval(readingTimerInterval);
+  readingSeconds = 0;
+  readingTimerInterval = setInterval(() => {
+    readingSeconds++;
+    updateReadingTimerDisplay();
+  }, 1000);
+
+  // Normalize Drive URLs
+  const isGoogleDrive = fileUrl.includes('drive.google.com') || fileUrl.includes('docs.google.com');
+  const folderMatch = fileUrl.match(/(?:folders\/|folderview\?id=|embeddedfolderview\?id=)([a-zA-Z0-9_-]+)/);
+  const isDriveFolder = isGoogleDrive && (Boolean(folderMatch) || fileUrl.includes('/folders/'));
+
+  if (isDriveFolder) {
+    pIcon.textContent = '📂';
+    const folderId = folderMatch ? folderMatch[1] : '';
+    const embedUrl = `https://drive.google.com/embeddedfolderview?id=${folderId}#grid`;
+
+    pBody.innerHTML = `
+      <div class="reader-stage-container">
+        <div class="reader-drive-notice">
+          <span>📂 <strong>Digital Book Collection Shelf</strong> • Browse all volumes & chapters below. Click any book to read inside this reader.</span>
+          <div class="reader-view-toggles">
+            <button class="btn btn-xs btn-ghost is-active" id="btnFolderGrid" onclick="switchFolderView('${folderId}', 'grid')">⊞ Grid View</button>
+            <button class="btn btn-xs btn-ghost" id="btnFolderList" onclick="switchFolderView('${folderId}', 'list')">☰ List View</button>
+          </div>
+        </div>
+        <div class="reader-frame-wrap">
+          <iframe id="readerIframe" src="${embedUrl}" allow="autoplay; fullscreen" title="${esc(title)}"></iframe>
+        </div>
+      </div>`;
+
+    pFoot.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="reader-timer-badge">⏱️ <span id="readerTimerText">00:00</span></span>
+        <span class="meta-chip" style="background:var(--bg-surface);color:var(--text-muted);font-size:0.75rem;">🛡️ In-Site Reading • Stays inside Portal</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm btn-ghost" onclick="toggleReaderTheater()">⛶ Fullscreen Reader</button>
+        ${bookId ? `<button class="btn btn-sm btn-ghost" onclick="toggleBookmark(${bookId}, event)">🔖 Bookmark</button>` : ''}
+      </div>`;
+  } else if (isGoogleDrive) {
+    pIcon.textContent = '📘';
+    let embedUrl = fileUrl;
+    const fileMatch = fileUrl.match(/(?:file\/d\/|open\?id=|uc\?id=|document\/d\/|presentation\/d\/|spreadsheets\/d\/)([a-zA-Z0-9_-]+)/);
+    const fileId = fileMatch ? fileMatch[1] : '';
+
+    if (fileUrl.includes('docs.google.com/document')) {
+      embedUrl = `https://docs.google.com/document/d/${fileId}/preview`;
+    } else if (fileUrl.includes('docs.google.com/presentation')) {
+      embedUrl = `https://docs.google.com/presentation/d/${fileId}/embed`;
+    } else if (fileUrl.includes('docs.google.com/spreadsheets')) {
+      embedUrl = `https://docs.google.com/spreadsheets/d/${fileId}/preview`;
+    } else if (fileId) {
+      embedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+    } else if (fileUrl.includes('/view')) {
+      embedUrl = fileUrl.replace(/\/view(\?.*)?$/, '/preview');
+    }
+
+    pBody.innerHTML = `
+      <div class="reader-stage-container">
+        <div class="reader-drive-notice">
+          <span>📘 <strong>Full Digital Edition</strong> • Read page-by-page directly inside this reader with zoom & page flipping.</span>
+          <span style="font-size:0.75rem;opacity:0.85;">🔒 In-Site Reading Mode Active</span>
+        </div>
+        <div class="reader-frame-wrap">
+          <iframe id="readerIframe" src="${embedUrl}" allow="autoplay; fullscreen" title="${esc(title)}"></iframe>
+        </div>
+      </div>`;
+
+    pFoot.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="reader-timer-badge">⏱️ <span id="readerTimerText">00:00</span></span>
+        <span class="meta-chip" style="background:var(--bg-surface);color:var(--text-muted);font-size:0.75rem;">🛡️ In-Site Reading Active</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm btn-ghost" onclick="toggleReaderTheater()">⛶ Fullscreen Reader</button>
+        ${bookId ? `<button class="btn btn-sm btn-ghost" onclick="toggleBookmark(${bookId}, event)">🔖 Bookmark</button>` : ''}
+      </div>`;
+  } else if (fileUrl.match(/\.(mp3|wav|ogg|m4a)$/i)) {
     pIcon.textContent = '🎧';
     pBody.innerHTML = `
-      <div style="text-align:center;padding:32px 16px;">
-        <div style="font-size:3.5rem;margin-bottom:12px;">🎵</div>
+      <div style="text-align:center;padding:48px 16px;">
+        <div style="font-size:3.8rem;margin-bottom:12px;">🎵</div>
         <h3 style="margin-bottom:6px;">${esc(title)}</h3>
         <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:24px;">Audio Stream from School Repository</p>
         <audio controls autoplay style="width:100%;max-width:540px;" src="${fileUrl}">
           Your browser does not support audio playback.
         </audio>
       </div>`;
-    pFoot.innerHTML = `<a href="${fileUrl}" target="_blank" download class="btn btn-sm btn-ghost">📥 Download Audio File</a>`;
+    pFoot.innerHTML = `
+      <span class="reader-timer-badge">⏱️ <span id="readerTimerText">00:00</span></span>
+      ${bookId ? `<button class="btn btn-sm btn-ghost" onclick="toggleBookmark(${bookId}, event)">🔖 Bookmark</button>` : ''}`;
   } else if (fileUrl.match(/\.(png|jpg|jpeg|gif|webp|svg)$/i)) {
     pIcon.textContent = '🖼️';
     pBody.innerHTML = `
-      <div style="text-align:center;">
-        <img src="${fileUrl}" alt="${esc(title)}" style="max-width:100%;max-height:60vh;object-fit:contain;border-radius:var(--radius-md);box-shadow:var(--shadow-sm);">
+      <div style="text-align:center;padding:20px;">
+        <img src="${fileUrl}" alt="${esc(title)}" style="max-width:100%;max-height:78vh;object-fit:contain;border-radius:var(--radius-md);box-shadow:var(--shadow-sm);">
       </div>`;
-    pFoot.innerHTML = `<a href="${fileUrl}" target="_blank" download class="btn btn-sm btn-ghost">📥 Download High-Res Image</a>`;
+    pFoot.innerHTML = `
+      <span class="reader-timer-badge">⏱️ <span id="readerTimerText">00:00</span></span>
+      <button class="btn btn-sm btn-ghost" onclick="toggleReaderTheater()">⛶ Fullscreen</button>`;
   } else if (fileUrl.match(/\.html$/i) || fileUrl.includes('/books/')) {
     pIcon.textContent = '🎃';
     pBody.innerHTML = `
-      <iframe src="${fileUrl}" style="width:100%;height:75vh;min-height:550px;border:none;border-radius:var(--radius-md);background:var(--bg-surface);" title="${esc(title)}"></iframe>`;
-
+      <div class="reader-stage-container">
+        <div class="reader-frame-wrap">
+          <iframe id="readerIframe" src="${fileUrl}" allow="autoplay; fullscreen" style="background:var(--bg-surface);" title="${esc(title)}"></iframe>
+        </div>
+      </div>`;
     pFoot.innerHTML = `
-      <div style="display:flex;gap:10px;align-items:center;">
-        <a href="${fileUrl}" target="_blank" class="btn btn-sm btn-gold">⛶ Open Dedicated Fullscreen Reader</a>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="reader-timer-badge">⏱️ <span id="readerTimerText">00:00</span></span>
+        <span class="meta-chip" style="background:var(--bg-surface);color:var(--text-muted);font-size:0.75rem;">Interactive Novel Edition</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm btn-ghost" onclick="toggleReaderTheater()">⛶ Fullscreen Reader</button>
+        ${bookId ? `<button class="btn btn-sm btn-ghost" onclick="toggleBookmark(${bookId}, event)">🔖 Bookmark</button>` : ''}
       </div>`;
   } else if (fileUrl.match(/\.pdf$/i)) {
     pIcon.textContent = '📕';
     pBody.innerHTML = `
-      <iframe src="${fileUrl}" style="width:100%;min-height:520px;border:none;border-radius:var(--radius-md);" title="${esc(title)}"></iframe>`;
-    pFoot.innerHTML = `<a href="${fileUrl}" target="_blank" class="btn btn-sm btn-gold">⛶ Open Full Screen</a>`;
+      <div class="reader-stage-container">
+        <div class="reader-frame-wrap">
+          <iframe id="readerIframe" src="${fileUrl}#toolbar=1&navpanes=0" allow="autoplay; fullscreen" title="${esc(title)}"></iframe>
+        </div>
+      </div>`;
+    pFoot.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span class="reader-timer-badge">⏱️ <span id="readerTimerText">00:00</span></span>
+        <span class="meta-chip" style="background:var(--bg-surface);color:var(--text-muted);font-size:0.75rem;">First-Party Academic PDF</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-sm btn-ghost" onclick="toggleReaderTheater()">⛶ Fullscreen Reader</button>
+        ${bookId ? `<button class="btn btn-sm btn-ghost" onclick="toggleBookmark(${bookId}, event)">🔖 Bookmark</button>` : ''}
+      </div>`;
+  } else if (fileUrl && fileUrl !== '#') {
+    pIcon.textContent = '📖';
+    pBody.innerHTML = `
+      <div class="reader-stage-container">
+        <div class="reader-frame-wrap">
+          <iframe id="readerIframe" src="${fileUrl}" allow="autoplay; fullscreen" title="${esc(title)}"></iframe>
+        </div>
+      </div>`;
+    pFoot.innerHTML = `
+      <span class="reader-timer-badge">⏱️ <span id="readerTimerText">00:00</span></span>
+      <button class="btn btn-sm btn-ghost" onclick="toggleReaderTheater()">⛶ Fullscreen Reader</button>`;
   } else {
     pIcon.textContent = '📖';
     pBody.innerHTML = `
-      <div style="text-align:center;padding:40px 16px;">
-        <div style="font-size:3.5rem;margin-bottom:12px;">📁</div>
+      <div style="text-align:center;padding:48px 16px;">
+        <div style="font-size:3.8rem;margin-bottom:12px;">📖</div>
         <h3>${esc(title)}</h3>
-        <p style="color:var(--text-muted);margin:8px 0 24px;">Resource file ready for reading & study</p>
-        <a href="${fileUrl}" target="_blank" class="btn btn-gold btn-lg">📥 Access / Download Resource File</a>
+        <p style="color:var(--text-secondary);font-size:0.95rem;max-width:540px;margin:12px auto 24px;">
+          This title is registered in the Viraj International School catalog. Physical & e-copies are available at the library desk.
+        </p>
+        <div style="display:flex;gap:10px;justify-content:center;">
+          ${bookId ? `<button class="btn btn-gold" onclick="toggleBookmark(${bookId}, event)">🔖 Save to Reading Passport</button>` : ''}
+          <button class="btn btn-ghost" onclick="closePreview()">Close</button>
+        </div>
       </div>`;
     pFoot.innerHTML = '';
   }
@@ -267,11 +437,22 @@ function openPreview(title, fileUrl, metaInfo = 'Viraj Digital Library Resource'
 
 function closePreview() {
   const modal = $('#previewModal');
+  const card = $('#readerModalCard');
   const pBody = $('#previewBody');
+  const theaterBtn = $('#theaterToggleBtn');
+
+  clearInterval(readingTimerInterval);
   if (modal) {
     modal.setAttribute('hidden', '');
     modal.classList.add('is-hidden');
     modal.style.display = 'none';
+  }
+  if (card) {
+    card.classList.remove('is-theater-fullscreen');
+  }
+  if (theaterBtn) {
+    theaterBtn.innerHTML = '⛶';
+    theaterBtn.title = 'Toggle Fullscreen Theater View';
   }
   if (pBody) pBody.innerHTML = '';
 }
@@ -296,7 +477,7 @@ function initModal() {
 }
 
 // User Interaction Tracker & Reader Launcher
-async function openItem(id, sec, title, file, author) {
+async function openItem(id, sec, title, file, author, isRented = false) {
   if (user) {
     try {
       await api('use', 'POST', { kind: sec, title });
@@ -304,31 +485,49 @@ async function openItem(id, sec, title, file, author) {
       console.warn('Log usage error:', e);
     }
   } else {
-    showToast('Reading as Guest Scholar. Log in anytime to save your Reading Passport! 🔖', 'info');
+    showToast('Reading as Guest Scholar. Log in anytime to borrow books to your Reading Passport! 🔖', 'info');
   }
 
   if (file) {
-    const isHtml = file.endsWith('.html');
-    const targetUrl = isHtml ? `/books/${file}` : `/uploads/${file}`;
-    openPreview(title, targetUrl, `${author} • ${sec.toUpperCase()} LIBRARY`);
-  } else {
-    openPreview(title, '#', `${author} • Digital Reading Hub`);
-    const pBody = $('#previewBody');
-    if (pBody) {
-      pBody.innerHTML = `
-        <div style="text-align:center;padding:36px 16px;">
-          <div style="font-size:3.5rem;margin-bottom:12px;">📖</div>
-          <h3>${esc(title)}</h3>
-          <p style="color:var(--text-secondary);font-size:0.95rem;max-width:540px;margin:12px auto 24px;">
-            By <strong>${esc(author)}</strong><br>
-            This curated academic reading title is registered in the Viraj International School catalog. Physical & e-copies are available at the library desk.
-          </p>
-          <div style="display:flex;gap:10px;justify-content:center;">
-            <button class="btn btn-gold" onclick="toggleBookmark(${id}, event)">🔖 Save to Reading Passport</button>
-            <button class="btn btn-ghost" onclick="closePreview()">Done</button>
-          </div>
-        </div>`;
+    let targetUrl = file;
+    if (!file.startsWith('http://') && !file.startsWith('https://')) {
+      const isHtml = file.endsWith('.html');
+      targetUrl = isHtml ? `/books/${file}` : `/uploads/${file}`;
     }
+    openPreview(title, targetUrl, `${author} • ${sec.toUpperCase()} LIBRARY`, id, isRented);
+  } else {
+    openPreview(title, '#', `${author} • Digital Reading Hub`, id, isRented);
+  }
+}
+
+// Combined Borrow & Read Action (100% Free Access)
+async function handleBookAction(id, sec, title, file, author, isAlreadyRented) {
+  if (user && !isAlreadyRented) {
+    try {
+      const rentRes = await api(`rent/${id}`, 'POST');
+      if (rentRes.rented) {
+        showToast(`🎉 Book borrowed! 14-day free loan active in your Reading Passport.`, 'success');
+        const item = (cachedItems || []).find(b => b.id === id);
+        if (item) item.isRented = true;
+      }
+    } catch (e) {
+      console.warn('Auto-borrow notice:', e);
+    }
+  }
+  openItem(id, sec, title, file, author, isAlreadyRented || Boolean(user));
+}
+
+async function returnRental(id, event) {
+  if (event) event.stopPropagation();
+  if (!user) return;
+  try {
+    await api(`return/${id}`, 'POST');
+    showToast('Book successfully returned to library desk. Thank you, scholar! 📚', 'success');
+    const item = (cachedItems || []).find(b => b.id === id);
+    if (item) item.isRented = false;
+    go('profile');
+  } catch (err) {
+    showToast(err.message, 'error');
   }
 }
 
@@ -389,6 +588,637 @@ async function handleGlobalSearch(query) {
   }
 }
 
+// Ambient Reading Sounds & Focus Tools Nav Handlers
+function toggleAmbientStudio() {
+  toggleDropdown('ambientStudioPopover');
+}
+
+function toggleFocusTimerWidget() {
+  toggleDropdown('focusTimerPopover');
+}
+
+// =========================================================
+// CELEBRATION CHIME (PURE NATIVE WEB AUDIO SYNTHESIS)
+// =========================================================
+function playCelebrationChime() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const aCtx = new AudioContextClass();
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    notes.forEach((freq, idx) => {
+      const osc = aCtx.createOscillator();
+      const gain = aCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, aCtx.currentTime + idx * 0.09);
+      gain.gain.setValueAtTime(0.18, aCtx.currentTime + idx * 0.09);
+      gain.gain.exponentialRampToValueAtTime(0.001, aCtx.currentTime + idx * 0.09 + 0.38);
+      osc.connect(gain);
+      gain.connect(aCtx.destination);
+      osc.start(aCtx.currentTime + idx * 0.09);
+      osc.stop(aCtx.currentTime + idx * 0.09 + 0.42);
+    });
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+// =========================================================
+// PROCEDURAL AMBIENT STUDY SOUNDS (PURE WEB AUDIO API)
+// Zero external files, 100% offline, soothing synthesis
+// =========================================================
+const AmbienceAudio = (() => {
+  let ctx = null;
+  let masterGain = null;
+  let currentSound = 'rain';
+  let isPlaying = false;
+  let activeNodes = [];
+  let intervalId = null;
+
+  function initCtx() {
+    if (!ctx) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        ctx = new AudioContextClass();
+        masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0.45, ctx.currentTime);
+        masterGain.connect(ctx.destination);
+      }
+    }
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume();
+    }
+  }
+
+  function stopCurrent() {
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    activeNodes.forEach(n => {
+      try { n.stop && n.stop(); n.disconnect && n.disconnect(); } catch (e) {}
+    });
+    activeNodes = [];
+  }
+
+  function createPinkNoiseBuffer(seconds = 5) {
+    if (!ctx) return null;
+    const bufferSize = ctx.sampleRate * seconds;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + white * 0.0555179;
+      b1 = 0.99332 * b1 + white * 0.0750759;
+      b2 = 0.96900 * b2 + white * 0.1538520;
+      b3 = 0.86650 * b3 + white * 0.3104856;
+      b4 = 0.55000 * b4 + white * 0.5329522;
+      b5 = -0.7616 * b5 - white * 0.0168980;
+      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.11;
+      b6 = white * 0.115926;
+    }
+    return buffer;
+  }
+
+  function playRain() {
+    const buffer = createPinkNoiseBuffer(6);
+    if (!buffer) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(850, ctx.currentTime);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    src.start();
+    activeNodes.push(src, filter, gain);
+
+    intervalId = setInterval(() => {
+      if (!isPlaying || !ctx) return;
+      try {
+        const drop = ctx.createOscillator();
+        const dropGain = ctx.createGain();
+        drop.type = 'sine';
+        const startFreq = 800 + Math.random() * 800;
+        drop.frequency.setValueAtTime(startFreq, ctx.currentTime);
+        drop.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.08);
+        dropGain.gain.setValueAtTime(0.08 * Math.random(), ctx.currentTime);
+        dropGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+        drop.connect(dropGain);
+        dropGain.connect(masterGain);
+        drop.start();
+        drop.stop(ctx.currentTime + 0.09);
+      } catch (e) {}
+    }, 280);
+  }
+
+  function playFire() {
+    const buffer = createPinkNoiseBuffer(5);
+    if (!buffer) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(380, ctx.currentTime);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    src.start();
+    activeNodes.push(src, filter, gain);
+
+    intervalId = setInterval(() => {
+      if (!isPlaying || !ctx) return;
+      if (Math.random() > 0.4) {
+        try {
+          const crackle = ctx.createOscillator();
+          const crackleGain = ctx.createGain();
+          crackle.type = 'square';
+          crackle.frequency.setValueAtTime(100 + Math.random() * 1200, ctx.currentTime);
+          crackleGain.gain.setValueAtTime(0.06 + Math.random() * 0.08, ctx.currentTime);
+          crackleGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.03);
+          crackle.connect(crackleGain);
+          crackleGain.connect(masterGain);
+          crackle.start();
+          crackle.stop(ctx.currentTime + 0.04);
+        } catch (e) {}
+      }
+    }, 120);
+  }
+
+  function playWaves() {
+    const buffer = createPinkNoiseBuffer(6);
+    if (!buffer) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(300, ctx.currentTime);
+
+    const lfo = ctx.createOscillator();
+    lfo.frequency.setValueAtTime(0.12, ctx.currentTime);
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.setValueAtTime(250, ctx.currentTime);
+    lfo.connect(lfoGain);
+    lfoGain.connect(filter.frequency);
+    lfo.start();
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.55, ctx.currentTime);
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    src.start();
+    activeNodes.push(src, filter, lfo, lfoGain, gain);
+  }
+
+  function playStudy() {
+    const buffer = createPinkNoiseBuffer(6);
+    if (!buffer) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(450, ctx.currentTime);
+    filter.Q.setValueAtTime(0.7, ctx.currentTime);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(masterGain);
+    src.start();
+    activeNodes.push(src, filter, gain);
+  }
+
+  function startSound(type) {
+    initCtx();
+    stopCurrent();
+    currentSound = type;
+    if (type === 'rain') playRain();
+    else if (type === 'fire') playFire();
+    else if (type === 'waves') playWaves();
+    else if (type === 'study') playStudy();
+    isPlaying = true;
+    updateUI();
+  }
+
+  function togglePlay() {
+    initCtx();
+    if (isPlaying) {
+      stopCurrent();
+      isPlaying = false;
+    } else {
+      startSound(currentSound);
+    }
+    updateUI();
+  }
+
+  function select(type) {
+    currentSound = type;
+    $$('.ambient-card').forEach(c => {
+      c.classList.toggle('active-ambient', c.dataset.sound === type);
+    });
+    if (isPlaying) {
+      startSound(type);
+    }
+  }
+
+  function setVolume(val) {
+    initCtx();
+    if (masterGain && ctx) {
+      masterGain.gain.setValueAtTime(Math.max(0, Math.min(1, val)), ctx.currentTime);
+    }
+  }
+
+  function updateUI() {
+    const btn = $('#ambientSoundBtn');
+    const badge = $('#ambientLiveBadge');
+    const playBtn = $('#ambientPlayBtn');
+    if (btn) btn.classList.toggle('is-active', isPlaying);
+    if (badge) {
+      badge.textContent = isPlaying ? 'LIVE 🎧' : 'OFF';
+      badge.classList.toggle('is-active', isPlaying);
+    }
+    if (playBtn) {
+      playBtn.textContent = isPlaying ? '⏸ Pause Sound' : '▶ Start Sound';
+    }
+  }
+
+  return { select, togglePlay, setVolume, startSound, isPlaying: () => isPlaying };
+})();
+
+// =========================================================
+// 20-MINUTE READING FOCUS SPRINT TIMER
+// =========================================================
+const FocusTimer = (() => {
+  let totalSeconds = 20 * 60;
+  let remainingSeconds = 20 * 60;
+  let timerInterval = null;
+  let isRunning = false;
+
+  function updateDisplay() {
+    const m = Math.floor(remainingSeconds / 60);
+    const s = remainingSeconds % 60;
+    const str = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    
+    const digits = $('#timerDigitsDisplay');
+    const badge = $('#navTimerBadge');
+    const ring = $('#timerRingProgress');
+    const statusPill = $('#timerStatusPill');
+
+    if (digits) digits.textContent = str;
+    if (badge) {
+      badge.textContent = str;
+      badge.hidden = !isRunning && remainingSeconds === totalSeconds;
+    }
+    if (statusPill) {
+      statusPill.textContent = isRunning ? 'SPRINTING ⏱' : (remainingSeconds === 0 ? 'DONE 🏆' : 'READY');
+      statusPill.classList.toggle('is-active', isRunning);
+    }
+    if (ring) {
+      const circumference = 301.6;
+      const progress = remainingSeconds / totalSeconds;
+      ring.style.strokeDashoffset = circumference * (1 - progress);
+    }
+  }
+
+  function tick() {
+    if (remainingSeconds > 0) {
+      remainingSeconds--;
+      updateDisplay();
+    } else {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      isRunning = false;
+      updateDisplay();
+      playCelebrationChime();
+      showToast('🎉 Reading Sprint Complete! You earned +25 Reading Passport points!', 'success');
+      const startBtn = $('#timerStartBtn');
+      if (startBtn) startBtn.textContent = '▶ Restart Sprint';
+      const btn = $('#focusTimerBtn');
+      if (btn) btn.classList.remove('is-active');
+    }
+  }
+
+  function toggle() {
+    const startBtn = $('#timerStartBtn');
+    const btn = $('#focusTimerBtn');
+    if (isRunning) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      isRunning = false;
+      if (startBtn) startBtn.textContent = '▶ Resume';
+      if (btn) btn.classList.remove('is-active');
+    } else {
+      if (remainingSeconds <= 0) remainingSeconds = totalSeconds;
+      timerInterval = setInterval(tick, 1000);
+      isRunning = true;
+      if (startBtn) startBtn.textContent = '⏸ Pause';
+      if (btn) btn.classList.add('is-active');
+    }
+    updateDisplay();
+  }
+
+  function reset() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+    isRunning = false;
+    remainingSeconds = totalSeconds;
+    const startBtn = $('#timerStartBtn');
+    const btn = $('#focusTimerBtn');
+    if (startBtn) startBtn.textContent = '▶ Start Sprint';
+    if (btn) btn.classList.remove('is-active');
+    updateDisplay();
+  }
+
+  function setDuration(minutes) {
+    totalSeconds = parseInt(minutes, 10) * 60;
+    reset();
+  }
+
+  return { toggle, reset, setDuration, init: updateDisplay };
+})();
+
+// =========================================================
+// 🌟 DAILY BOOK WISDOM & LITERARY TRIVIA WIDGET
+// =========================================================
+const DAILY_WISDOM_QUOTES = [
+  {
+    quote: "The more that you read, the more things you will know. The more that you learn, the more places you'll go.",
+    author: "Dr. Seuss",
+    tag: "Reading Inspiration"
+  },
+  {
+    quote: "A reader lives a thousand lives before he dies. The man who never reads lives only one.",
+    author: "George R.R. Martin",
+    tag: "Power of Literature"
+  },
+  {
+    quote: "There is more treasure in books than in all the pirate's loot on Treasure Island.",
+    author: "Walt Disney",
+    tag: "Lifelong Treasure"
+  },
+  {
+    quote: "Books are a uniquely portable magic.",
+    author: "Stephen King",
+    tag: "Magic of Words"
+  },
+  {
+    quote: "Did you know? R.L. Stine wrote all Goosebumps books in just 8 to 10 days each, typing out over 400 million sold copies worldwide!",
+    author: "Goosebumps Trivia Desk",
+    tag: "Campus Fact of the Day"
+  },
+  {
+    quote: "If you don't like to read, you haven't found the right book yet.",
+    author: "J.K. Rowling",
+    tag: "Discover Your Genre"
+  }
+];
+
+let currentWisdomIndex = Math.floor(Math.random() * DAILY_WISDOM_QUOTES.length);
+
+function shuffleWisdomQuote() {
+  currentWisdomIndex = (currentWisdomIndex + 1) % DAILY_WISDOM_QUOTES.length;
+  const card = $('#dailyWisdomCard');
+  if (card) {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(4px)';
+    setTimeout(() => {
+      const item = DAILY_WISDOM_QUOTES[currentWisdomIndex];
+      const tagEl = $('#wisdomTag');
+      const quoteEl = $('#wisdomQuote');
+      const authEl = $('#wisdomAuthor');
+      if (tagEl) tagEl.textContent = item.tag;
+      if (quoteEl) quoteEl.textContent = `“${item.quote}”`;
+      if (authEl) authEl.textContent = `— ${item.author}`;
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, 200);
+  }
+}
+
+function renderDailyWisdomWidget() {
+  const item = DAILY_WISDOM_QUOTES[currentWisdomIndex];
+  return `
+    <section class="daily-wisdom-section">
+      <div class="daily-wisdom-card" id="dailyWisdomCard">
+        <div class="wisdom-content">
+          <div class="wisdom-icon-circle">📜</div>
+          <div>
+            <div class="wisdom-tag" id="wisdomTag">${esc(item.tag)}</div>
+            <div class="wisdom-quote" id="wisdomQuote">“${esc(item.quote)}”</div>
+            <div class="wisdom-author" id="wisdomAuthor">— ${esc(item.author)}</div>
+          </div>
+        </div>
+        <div class="wisdom-action-btn">
+          <button class="btn btn-sm btn-ghost" onclick="shuffleWisdomQuote()" title="Load another inspiring wisdom quote">
+            🎲 Another Quote
+          </button>
+        </div>
+      </div>
+    </section>`;
+}
+
+// =========================================================
+// 🎲 MYSTERY BOOK DISCOVERER / SURPRISE ME
+// =========================================================
+async function openRandomBook() {
+  const modal = $('#surpriseModal');
+  const body = $('#surpriseModalBody');
+  if (!modal || !body) return;
+
+  modal.removeAttribute('hidden');
+  modal.style.display = 'flex';
+
+  const items = cachedItems.length ? cachedItems : await api('items');
+  if (!items || !items.length) {
+    showToast('Catalog is loading, please try again.', 'info');
+    return;
+  }
+
+  const winner = items[Math.floor(Math.random() * items.length)];
+  const isGoosebumps = Boolean(winner.title && (winner.title.includes('Goosebumps') || (winner.author && winner.author.includes('Stine'))));
+  const customCover = BOOK_COVERS[winner.title] || (isGoosebumps ? (
+    winner.title.includes('Deep Trouble') ? '/covers/deep-trouble.jpg' :
+    winner.title.includes('Ghost Beach') ? '/covers/ghost-beach.jpg' :
+    winner.title.includes('Go Eat Worms') ? '/covers/go-eat-worms.jpg' :
+    winner.title.includes('Monster Blood') ? '/covers/monster-blood-2.jpg' :
+    winner.title.includes('HorrorLand') ? '/covers/one-day-at-horrorland.jpg' : null
+  ) : null);
+
+  body.innerHTML = `
+    <div class="surprise-reel-container">
+      <div style="font-size:2.8rem;margin-bottom:12px;animation:spin 0.6s infinite linear;">🎲</div>
+      <h3 style="font-size:1.3rem;margin-bottom:6px;">Consulting Library Oracles...</h3>
+      <p style="color:var(--text-muted);font-size:0.85rem;">Selecting a captivating title from the school catalog...</p>
+    </div>`;
+
+  setTimeout(() => {
+    playCelebrationChime();
+    body.innerHTML = `
+      <div class="surprise-reel-container surprise-winner-reveal">
+        <div style="font-size:1.6rem;margin-bottom:8px;">✨ It's a Match! ✨</div>
+        ${customCover ? `
+          <img src="${customCover}" alt="${esc(winner.title)}" class="surprise-cover-spotlight">
+        ` : `
+          <div class="surprise-cover-spotlight" style="display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg, var(--navy-primary), var(--blue-accent));color:#fff;font-size:2.8rem;">
+            ${winner.section === 'junior' ? '🧸' : (winner.category === 'Comics' ? '🎨' : '📖')}
+          </div>
+        `}
+        <h3 class="surprise-book-title">${esc(winner.title)}</h3>
+        <div class="surprise-book-author">By ${esc(winner.author || 'Viraj Heritage Press')}</div>
+        <div style="display:flex;gap:6px;justify-content:center;margin-bottom:14px;">
+          <span class="meta-chip">📚 ${esc(winner.category || 'General')}</span>
+          <span class="meta-chip">🎓 ${esc(winner.grade || 'All Grades')}</span>
+          <span class="meta-chip">⏱ ${esc(winner.read_time || '15 min')}</span>
+        </div>
+        <p class="surprise-book-blurb">${esc(winner.description || 'A brilliant literary and educational work available in the Viraj International School Digital Hub.')}</p>
+        <div class="surprise-modal-actions">
+          <button class="btn btn-gold btn-lg" onclick="closeSurpriseModal(); openItem(${winner.id}, '${winner.section}', '${esc(winner.title).replace(/'/g, "\\'")}', '${esc(winner.file || '')}', '${esc(winner.author || '').replace(/'/g, "\\'")}')">
+            📖 Start Reading Now
+          </button>
+          <button class="btn btn-ghost" onclick="openRandomBook()">
+            🎲 Spin Again
+          </button>
+          <button class="btn btn-ghost" onclick="closeSurpriseModal()">
+            Close
+          </button>
+        </div>
+      </div>`;
+  }, 650);
+}
+
+function closeSurpriseModal() {
+  const modal = $('#surpriseModal');
+  if (modal) {
+    modal.setAttribute('hidden', '');
+    modal.style.display = 'none';
+  }
+}
+
+// =========================================================
+// ⚡ QUICK PEEK / BOOK SYNOPSIS MODAL
+// =========================================================
+async function openQuickPeek(id) {
+  const modal = $('#quickPeekModal');
+  const body = $('#peekModalBody');
+  const titleEl = $('#peekTitle');
+  const metaEl = $('#peekMeta');
+  if (!modal || !body) return;
+
+  const items = (cachedItems && cachedItems.length) ? cachedItems : await api('items');
+  cachedItems = items;
+  const book = items.find(b => Number(b.id) === Number(id));
+  if (!book) {
+    showToast('Book details not found.', 'error');
+    return;
+  }
+
+  const isGoosebumps = Boolean(book.title && (book.title.includes('Goosebumps') || (book.author && book.author.includes('Stine'))));
+  const customCover = BOOK_COVERS[book.title] || (isGoosebumps ? (
+    book.title.includes('Deep Trouble') ? '/covers/deep-trouble.jpg' :
+    book.title.includes('Ghost Beach') ? '/covers/ghost-beach.jpg' :
+    book.title.includes('Go Eat Worms') ? '/covers/go-eat-worms.jpg' :
+    book.title.includes('Monster Blood') ? '/covers/monster-blood-2.jpg' :
+    book.title.includes('HorrorLand') ? '/covers/one-day-at-horrorland.jpg' : null
+  ) : null);
+
+  titleEl.textContent = book.title;
+  metaEl.textContent = `By ${book.author} • ${book.category || 'General'}`;
+
+  body.innerHTML = `
+    <div class="peek-content-grid">
+      <div class="peek-cover-box" style="${customCover ? `background-image:url('${customCover}');` : `background:linear-gradient(135deg, var(--navy-primary), var(--navy-dark));`}">
+        <div style="background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">
+          ${isGoosebumps ? '🎃 Goosebumps' : esc(book.section.toUpperCase())}
+        </div>
+      </div>
+      <div>
+        <div class="peek-stats-row">
+          <span class="peek-stat-pill">🏷 ${esc(book.category)}</span>
+          <span class="peek-stat-pill">🎓 Grade: ${esc(book.grade || 'All')}</span>
+          <span class="peek-stat-pill">⏱ ${esc(book.read_time || '15 min')}</span>
+          <span class="peek-stat-pill" style="color:var(--status-success);">✓ Digital Web Edition</span>
+        </div>
+        <h4 style="font-size:1.1rem;margin-bottom:6px;">Synopsis</h4>
+        <p style="font-size:0.88rem;color:var(--text-secondary);line-height:1.5;margin-bottom:18px;">
+          ${esc(book.description || 'Complete reading material registered in the school digital knowledge hub. Accessible anywhere 24/7 on desktop and mobile.')}
+        </p>
+        <div style="background:var(--bg-secondary);padding:10px 14px;border-radius:var(--radius-sm);font-size:0.8rem;color:var(--text-muted);margin-bottom:20px;">
+          💡 <strong>Reader Specs:</strong> Interactive digital reader with 4 color modes (Sepia, Dark, Slime, Light), font sizing, and text-to-speech read-aloud.
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="btn btn-gold" onclick="closeQuickPeek(); handleBookAction(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}', ${Boolean(book.isRented)})">
+            📖 Borrow & Read Online (100% Free)
+          </button>
+          <button class="btn btn-ghost" onclick="toggleBookmark(${book.id}, event)">
+            🔖 Bookmark
+          </button>
+          <button class="btn btn-ghost" onclick="closeQuickPeek()">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  modal.removeAttribute('hidden');
+  modal.style.display = 'flex';
+}
+
+function closeQuickPeek() {
+  const modal = $('#quickPeekModal');
+  if (modal) {
+    modal.setAttribute('hidden', '');
+    modal.style.display = 'none';
+  }
+}
+
+// 3D Perspective Tilt on Mouse Movement
+function init3DCardTilt() {
+  document.addEventListener('mousemove', e => {
+    const card = e.target.closest('.book-card');
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const centerX = rect.width / 2;
+    const centerY = rect.height / 2;
+    const rx = ((y - centerY) / centerY) * -8;
+    const ry = ((x - centerX) / centerX) * 8;
+    card.style.setProperty('--rx', `${rx.toFixed(2)}deg`);
+    card.style.setProperty('--ry', `${ry.toFixed(2)}deg`);
+    card.style.setProperty('--mx', `${x.toFixed(1)}px`);
+    card.style.setProperty('--my', `${y.toFixed(1)}px`);
+  });
+
+  document.addEventListener('mouseleave', e => {
+    const card = e.target.closest('.book-card');
+    if (!card) return;
+    card.style.setProperty('--rx', '0deg');
+    card.style.setProperty('--ry', '0deg');
+  }, true);
+}
+
 // Authentic Book Cover Artwork Registry
 const BOOK_COVERS = {
   'Goosebumps #19: Deep Trouble': '/covers/deep-trouble.jpg',
@@ -398,7 +1228,7 @@ const BOOK_COVERS = {
   'Goosebumps #16: One Day at HorrorLand': '/covers/one-day-at-horrorland.jpg'
 };
 
-// Realistic Digital Book Card Renderer
+// Realistic Digital Book Card Renderer with 3D Tilt & Glare
 function renderBookCard(book) {
   const isSaved = book.isBookmarked || false;
   let coverClass = 'cover-secondary';
@@ -428,6 +1258,7 @@ function renderBookCard(book) {
 
   return `
     <div class="book-card ${isGoosebumps ? 'book-card-goosebumps' : ''}">
+      <div class="book-glare"></div>
       <div class="book-cover-wrap ${coverClass} ${customCover ? 'has-cover-art' : ''}" style="${customCover ? `background-image:url('${customCover}');` : ''}">
         <div class="book-cover-spine"></div>
         <div class="book-cover-top">
@@ -448,15 +1279,21 @@ function renderBookCard(book) {
             <span class="meta-chip">🎓 ${esc(book.grade || 'All Grades')}</span>
             <span class="meta-chip">⏱ ${esc(book.read_time || '10 min')}</span>
             ${isGoosebumps ? '<span class="meta-chip meta-chip-hot">🔥 Full Novel</span>' : ''}
+            ${book.isRented ? '<span class="meta-chip" style="background:var(--status-success-bg);color:var(--status-success);border-color:var(--status-success);font-weight:700;">🟢 Rented</span>' : ''}
           </div>
           <p class="book-desc-snippet">${esc(book.description || 'Comprehensive digital reading resource for students and teachers.')}</p>
         </div>
 
         <div class="book-action-footer">
-          <button class="btn btn-sm ${isGoosebumps ? 'btn-green' : 'btn-gold'}" style="width:100%;" 
-            onclick="openItem(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}')">
-            ${book.content_type === 'audio' ? '🎧 Listen Now' : (isGoosebumps ? '📖 Read Full Book' : '📖 Read Now')}
-          </button>
+          <div class="book-action-footer-grid">
+            <button class="btn btn-sm ${isGoosebumps ? 'btn-green' : (book.isRented ? 'btn-gold' : 'btn-gold')}" style="width:100%;" 
+              onclick="handleBookAction(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}', ${Boolean(book.isRented)})">
+              ${book.content_type === 'audio' ? '🎧 Listen' : (book.isRented ? '📖 Read (Borrowed)' : '📖 Borrow & Read (Free)')}
+            </button>
+            <button class="btn-peek" onclick="openQuickPeek(${book.id})" title="Quick Peek & Summary">
+              ⚡ Peek
+            </button>
+          </div>
         </div>
       </div>
     </div>`;
@@ -469,6 +1306,7 @@ const views = {
   // 1. HOME VIEW (EXACT 11-PART SEQUENCE)
   async home() {
     const allItems = await api('items');
+    cachedItems = allItems;
     const goosebumpsBooks = allItems.filter(b => b.title && b.title.includes('Goosebumps'));
     
     // Balanced diverse featured books across all wings (Junior, Novel, Comic, Biography)
@@ -520,10 +1358,10 @@ const views = {
         <div class="hero-left">
           <div class="hero-sub-badge">
             <span class="hero-live-dot"></span>
-            <span>VIRAJ INTERNATIONAL SCHOOL • 24/7 DIGITAL HUB</span>
+            <span>VIRAJ INTERNATIONAL SCHOOL • 100% FREE STUDENT ACCESS</span>
           </div>
           <h1 class="hero-heading">Digital Knowledge & <span class="hero-gold-text">Library Hub</span></h1>
-          <p class="hero-motto">“Discover. Read. Learn. Participate. — Empowering Young Minds Every Day.”</p>
+          <p class="hero-motto">“Discover. Read. Learn. Participate. — 100% Free digital access for every student with Librarian permission.”</p>
           
           <div class="hero-buttons">
             <button class="btn btn-gold btn-lg" onclick="go('secondary')">📚 Explore Library</button>
@@ -549,9 +1387,9 @@ const views = {
         </div>
 
         <div class="hero-right-badge">
-          <img src="logo.svg" alt="Viraj School Emblem" class="hero-crest-lg">
+          <img src="logo.png" alt="Viraj School Emblem" class="hero-crest-lg">
           <span style="font-size:0.85rem;font-weight:800;letter-spacing:1px;color:#ffffff;">ACADEMIC HUB</span>
-          <small style="font-size:0.7rem;color:#cbd5e1;margin-bottom:8px;">Certified Knowledge Repository</small>
+          <small style="font-size:0.7rem;color:#cbd5e1;margin-bottom:8px;">CBSE School • Kurgaon, Boisar</small>
           
           <div class="hero-stat-grid">
             <div class="hero-mini-stat">
@@ -573,6 +1411,9 @@ const views = {
           </div>
         </div>
       </section>
+
+      <!-- 1B. Daily Book Wisdom & Inspiration Widget -->
+      ${renderDailyWisdomWidget()}
 
       <!-- 2. Featured Digital Books -->
       <section class="home-section">
@@ -944,9 +1785,16 @@ const views = {
     cachedItems = items;
 
     return `
-      <div style="margin-bottom:24px;">
-        <h2 style="font-size:1.8rem;margin-bottom:4px;">🧸 Junior Library</h2>
-        <p style="color:var(--text-muted);font-size:0.9rem;">Nursery rhymes, short stories, audio and flip books for primary learners.</p>
+      <div style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:1.8rem;margin-bottom:4px;">🧸 Junior Library</h2>
+          <p style="color:var(--text-muted);font-size:0.9rem;">Nursery rhymes, short stories, audio and flip books for primary learners.</p>
+        </div>
+        ${isLibrarian() ? `
+          <button class="btn btn-gold" onclick="go('admin')" style="display:inline-flex;align-items:center;gap:6px;">
+            ➕ Add Books to Catalog
+          </button>
+        ` : ''}
       </div>
 
       <!-- Catalog Toolbar -->
@@ -993,9 +1841,16 @@ const views = {
     cachedItems = items;
 
     return `
-      <div style="margin-bottom:24px;">
-        <h2 style="font-size:1.8rem;margin-bottom:4px;">📚 Secondary Library</h2>
-        <p style="color:var(--text-muted);font-size:0.9rem;">Academics, comics, novels, encyclopedias and audiobooks for middle and senior students.</p>
+      <div style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:1.8rem;margin-bottom:4px;">📚 Secondary Library</h2>
+          <p style="color:var(--text-muted);font-size:0.9rem;">Academics, comics, novels, encyclopedias and audiobooks for middle and senior students.</p>
+        </div>
+        ${isLibrarian() ? `
+          <button class="btn btn-gold" onclick="go('admin')" style="display:inline-flex;align-items:center;gap:6px;">
+            ➕ Add Books to Catalog
+          </button>
+        ` : ''}
       </div>
 
       <!-- Catalog Toolbar -->
@@ -1039,9 +1894,16 @@ const views = {
     cachedItems = items;
 
     return `
-      <div style="margin-bottom:24px;">
-        <h2 style="font-size:1.8rem;margin-bottom:4px;">👑 Biographies & Great Minds</h2>
-        <p style="color:var(--text-muted);font-size:0.9rem;">Inspiring life stories of scientists, leaders, writers, inventors and great thinkers.</p>
+      <div style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:1.8rem;margin-bottom:4px;">👑 Biographies & Great Minds</h2>
+          <p style="color:var(--text-muted);font-size:0.9rem;">Inspiring life stories of scientists, leaders, writers, inventors and great thinkers.</p>
+        </div>
+        ${isLibrarian() ? `
+          <button class="btn btn-gold" onclick="go('admin')" style="display:inline-flex;align-items:center;gap:6px;">
+            ➕ Add Books to Catalog
+          </button>
+        ` : ''}
       </div>
 
       <div class="catalog-toolbar">
@@ -1585,6 +2447,50 @@ const views = {
           </div>
         </div>
 
+        <!-- Active Borrowed Books Shelf -->
+        <div class="admin-panel-card" style="margin-bottom:24px;">
+          <div class="section-header-row">
+            <div>
+              <h4 class="section-title" style="font-size:1.2rem;">📚 My Borrowed Books & Active Loans (100% Free Access)</h4>
+              <p style="color:var(--text-muted);font-size:0.85rem;margin-top:2px;">Books currently checked out to your student account with official school library permission. 100% free access.</p>
+            </div>
+            <span class="pillar-badge" style="background:var(--status-success-bg);color:var(--status-success);font-weight:700;">${(u.rentals || []).length} Active Loans</span>
+          </div>
+
+          ${(u.rentals && u.rentals.length) ? `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(280px, 1fr));gap:14px;margin-top:14px;">
+              ${u.rentals.map(r => {
+                const daysLeft = Math.max(1, Math.ceil((r.due_at - Date.now()) / (864e5)));
+                return `
+                  <div class="admin-stat-card" style="flex-direction:column;align-items:flex-start;gap:12px;background:var(--bg-surface);padding:16px;">
+                    <div style="width:100%;display:flex;justify-content:space-between;align-items:flex-start;">
+                      <div>
+                        <div style="font-weight:700;font-size:0.95rem;color:var(--text-main);margin-bottom:2px;">${esc(r.title)}</div>
+                        <div style="color:var(--text-muted);font-size:0.8rem;">By ${esc(r.author || 'Viraj Press')} • ${esc(r.category || 'General')}</div>
+                      </div>
+                      <span class="meta-chip" style="background:var(--status-success-bg);color:var(--status-success);font-size:0.75rem;">🟢 ${daysLeft} days left</span>
+                    </div>
+                    <div style="width:100%;display:flex;gap:8px;">
+                      <button class="btn btn-sm btn-gold" style="flex:1;" onclick="openItem(${r.id}, '${r.section}', '${esc(r.title).replace(/'/g, "\\'")}', '${esc(r.file || '')}', '${esc(r.author || '').replace(/'/g, "\\'")}', true)">
+                        📖 Read Book
+                      </button>
+                      <button class="btn btn-sm btn-ghost" onclick="returnRental(${r.id}, event)" title="Return to Library">
+                        ↩️ Return
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : `
+            <div style="text-align:center;padding:24px;background:var(--bg-secondary);border-radius:var(--radius-md);margin-top:10px;">
+              <div style="font-size:2rem;margin-bottom:6px;">📖</div>
+              <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:8px;">You don't have any books currently borrowed.</p>
+              <button class="btn btn-sm btn-gold" onclick="go('home')">Browse Library Shelves</button>
+            </div>
+          `}
+        </div>
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
           <!-- Bookmarks -->
           <div class="admin-panel-card">
@@ -1677,21 +2583,256 @@ const views = {
       </div>`;
   },
 
-  // 13. ABOUT THE LIBRARY
+  // 13. ABOUT THE LIBRARY & VIRAJ INTERNATIONAL SCHOOL
   about() {
+    // Current IST Time calculation for Campus Working Hours
+    const now = new Date();
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
+    const istDate = new Date(utcTime + (5.5 * 3600000));
+    const day = istDate.getDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+    const hours = istDate.getHours();
+    const minutes = istDate.getMinutes();
+    const currentMins = hours * 60 + minutes;
+
+    let isOpen = false;
+    let statusMsg = '';
+    let statusClass = 'status-closed';
+
+    if (day === 0) {
+      statusMsg = 'Campus Closed Today (Sunday) • Reopens Monday at 8:00 AM';
+      statusClass = 'status-closed';
+    } else if (day === 6) {
+      if (currentMins >= 8 * 60 && currentMins < 14 * 60) {
+        statusMsg = 'Campus Open Today (8:00 AM – 2:00 PM)';
+        statusClass = 'status-open';
+      } else if (currentMins < 8 * 60) {
+        statusMsg = 'Campus Opens at 8:00 AM Today (Saturday)';
+        statusClass = 'status-closed';
+      } else {
+        statusMsg = 'Campus Closed for the Day • Reopens Monday at 8:00 AM';
+        statusClass = 'status-closed';
+      }
+    } else {
+      if (currentMins >= 8 * 60 && currentMins < 16 * 60) {
+        statusMsg = 'Campus Open Today (8:00 AM – 4:00 PM)';
+        statusClass = 'status-open';
+      } else if (currentMins < 8 * 60) {
+        statusMsg = 'Campus Opens at 8:00 AM Today';
+        statusClass = 'status-closed';
+      } else {
+        statusMsg = 'Campus Closed for the Day • Reopens Tomorrow at 8:00 AM';
+        statusClass = 'status-closed';
+      }
+    }
+
+    const schedule = [
+      { d: 1, name: 'Monday', hours: '8:00 AM – 4:00 PM' },
+      { d: 2, name: 'Tuesday', hours: '8:00 AM – 4:00 PM' },
+      { d: 3, name: 'Wednesday', hours: '8:00 AM – 4:00 PM' },
+      { d: 4, name: 'Thursday', hours: '8:00 AM – 4:00 PM' },
+      { d: 5, name: 'Friday', hours: '8:00 AM – 4:00 PM' },
+      { d: 6, name: 'Saturday', hours: '8:00 AM – 2:00 PM' },
+      { d: 0, name: 'Sunday', hours: 'Closed' }
+    ];
+
     return `
-      <div style="max-width:820px;margin:0 auto;">
-        <div style="text-align:center;margin-bottom:32px;">
-          <img src="logo.svg" alt="Viraj Crest" style="width:72px;height:72px;margin-bottom:12px;">
-          <h2 style="font-family:'Cinzel',serif;font-size:1.8rem;color:var(--navy-primary);">VIRAJ INTERNATIONAL SCHOOL</h2>
-          <p style="color:var(--gold-primary);font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">Digital Knowledge & Library Hub</p>
+      <div class="about-page-wrap">
+        <!-- Hero Header -->
+        <div class="about-hero-banner">
+          <img src="logo.png" alt="Viraj International School Crest" class="about-crest-lg">
+          <h1 class="about-school-name">VIRAJ INTERNATIONAL SCHOOL</h1>
+          <p class="about-school-affil">🎓 CBSE Affiliated Institution • Kurgaon, Boisar, Maharashtra</p>
+          <p class="about-school-motto">
+            “Nurturing intellectual curiosity, moral integrity, academic distinction, and lifelong learning for every scholar.”
+          </p>
+          <div class="about-action-btns">
+            <a href="https://www.virajinternationalschool.com/" target="_blank" rel="noopener" class="btn btn-gold">
+              🌐 Official School Website ↗
+            </a>
+            <a href="https://www.google.com/search?q=viraj+international+school+address&ludocid=6206948811688517609" target="_blank" rel="noopener" class="btn btn-ghost" style="color:#ffffff;border-color:rgba(255,255,255,0.4);">
+              🧭 Directions (30 mins from Boisar) ↗
+            </a>
+            <a href="tel:08554998833" class="btn btn-ghost" style="color:#ffffff;border-color:rgba(255,255,255,0.4);">
+              📞 Call: 085549 98833
+            </a>
+          </div>
         </div>
 
-        <div class="admin-panel-card" style="margin-bottom:24px;">
-          <h3 style="margin-bottom:10px;">🏛️ About the Library</h3>
-          <p style="color:var(--text-secondary);line-height:1.6;margin-bottom:14px;">
-            The Viraj International School Digital Knowledge & Library Hub provides students, faculty, and scholars with 24/7 access to curriculum textbooks, world literature, biographies, audiobooks, and knowledge challenges.
+        <!-- 2-Column Campus & Timing Grid -->
+        <div class="about-grid-2col">
+          <!-- Campus & Location Card -->
+          <div class="about-detail-card">
+            <div class="about-card-title">
+              <span>🏛️</span>
+              <span>Campus & Contact Details</span>
+            </div>
+
+            <div class="about-info-row">
+              <span class="about-info-icon">📍</span>
+              <div class="about-info-text">
+                <strong>Campus Address</strong>
+                <span>Survey No.27, Boisar - Tarapur Rd, Near Kurgaon Grampanchayat Office, Kurgaon, Boisar, Maharashtra 401502</span>
+              </div>
+            </div>
+
+            <div class="about-info-row">
+              <span class="about-info-icon">🚗</span>
+              <div class="about-info-text">
+                <strong>Travel & Accessibility</strong>
+                <span>~30 mins transit from Boisar town center & Boisar Railway Station</span>
+              </div>
+            </div>
+
+            <div class="about-info-row">
+              <span class="about-info-icon">📞</span>
+              <div class="about-info-text">
+                <strong>Telephone Desk</strong>
+                <a href="tel:08554998833" class="footer-ext-link" style="font-size:1rem;font-weight:700;">085549 98833</a>
+              </div>
+            </div>
+
+            <div class="about-info-row">
+              <span class="about-info-icon">🌐</span>
+              <div class="about-info-text">
+                <strong>Official Portal</strong>
+                <a href="https://www.virajinternationalschool.com/" target="_blank" rel="noopener" class="footer-ext-link">
+                  https://www.virajinternationalschool.com/ ↗
+                </a>
+              </div>
+            </div>
+
+            <div class="about-info-row">
+              <span class="about-info-icon">🏫</span>
+              <div class="about-info-text">
+                <strong>Curriculum & Board</strong>
+                <span>Central Board of Secondary Education (CBSE), New Delhi</span>
+              </div>
+            </div>
+
+            <div style="margin-top:auto;padding-top:14px;">
+              <a href="https://www.google.com/search?q=viraj+international+school+address&ludocid=6206948811688517609" target="_blank" rel="noopener" class="btn btn-sm btn-gold" style="width:100%;text-align:center;display:block;text-decoration:none;">
+                🗺️ Open in Google Maps (Kurgaon Campus)
+              </a>
+            </div>
+          </div>
+
+          <!-- Working Hours & Live Status Card -->
+          <div class="about-detail-card">
+            <div class="about-card-title">
+              <span>⏰</span>
+              <span>Campus & Library Timings</span>
+            </div>
+
+            <div class="campus-status-pill ${statusClass}">
+              <span class="status-dot-pulse"></span>
+              <span>${statusMsg}</span>
+            </div>
+
+            <table class="timing-table">
+              <thead>
+                <tr>
+                  <th>Day</th>
+                  <th>Campus & Library Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${schedule.map(s => `
+                  <tr class="${s.d === day ? 'today-row' : ''}">
+                    <td>
+                      ${s.name}
+                      ${s.d === day ? '<span class="today-pill-tag">Today</span>' : ''}
+                    </td>
+                    <td>${s.hours}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div style="margin-top:16px;padding:12px;background:var(--bg-body);border-radius:var(--radius-sm);border:1px solid var(--border-color);font-size:0.82rem;line-height:1.45;color:var(--text-secondary);">
+              <strong style="color:var(--navy-primary);display:block;margin-bottom:4px;">🌐 24/7 Digital Library Hub Access</strong>
+              While the physical school campus observes official hours, this digital repository, reader, focus timer, and quizzes are accessible online 24 hours a day, 7 days a week.
+            </div>
+          </div>
+        </div>
+
+        <!-- Library Wings & Learning Ecosystem -->
+        <div class="about-detail-card" style="margin-bottom:28px;">
+          <div class="about-card-title">
+            <span>📚</span>
+            <span>Digital Library Hub Ecosystem</span>
+          </div>
+          <p style="color:var(--text-secondary);font-size:0.92rem;line-height:1.6;margin-bottom:16px;">
+            The Viraj International School Digital Knowledge Hub provides a comprehensive multi-tier reading environment designed to foster curiosity, academic excellence, and independent critical thinking.
           </p>
+
+          <div class="about-wings-grid">
+            <div class="about-wing-box" onclick="go('junior')">
+              <span class="about-wing-icon">🧸</span>
+              <div class="about-wing-title">Junior Library Wing</div>
+              <div class="about-wing-desc">Nursery rhymes, illustrated short stories, interactive flip-books, and bedtime audio for primary grades.</div>
+            </div>
+
+            <div class="about-wing-box" onclick="go('secondary')">
+              <span class="about-wing-icon">📖</span>
+              <div class="about-wing-title">Secondary Academic Wing</div>
+              <div class="about-wing-desc">CBSE curriculum sciences, Goosebumps & horror thrillers, world literature classics, graphic novels, and visual encyclopedias.</div>
+            </div>
+
+            <div class="about-wing-box" onclick="go('biography')">
+              <span class="about-wing-icon">👑</span>
+              <div class="about-wing-title">Biographies & Great Minds</div>
+              <div class="about-wing-desc">Inspiring stories of legendary scientists, inventors, Indian personalities, and global trailblazers.</div>
+            </div>
+
+            <div class="about-wing-box" onclick="go('quiz')">
+              <span class="about-wing-icon">🧠</span>
+              <div class="about-wing-title">Test Your Wits Arena</div>
+              <div class="about-wing-desc">Dynamic multi-level quizzes across science, literature, and general knowledge with instant feedback and passport points.</div>
+            </div>
+
+            <div class="about-wing-box" onclick="go('news')">
+              <span class="about-wing-icon">📰</span>
+              <div class="about-wing-title">Daily Newspapers & Press</div>
+              <div class="about-wing-desc">The Hindu (In School), Indian Express Explorer, Times NIE, and official Viraj campus circulars.</div>
+            </div>
+
+            <div class="about-wing-box" onclick="go('avid')">
+              <span class="about-wing-icon">🏆</span>
+              <div class="about-wing-title">Avid Reader Honors</div>
+              <div class="about-wing-desc">Monthly gold podium celebrations for top campus and digital readers, inspiring peer excellence.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Student Reading Passport & Ethics -->
+        <div class="about-detail-card">
+          <div class="about-card-title">
+            <span>🛡️</span>
+            <span>Digital Library Guidelines & Student Charter</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:16px;margin-top:8px;">
+            <div>
+              <h4 style="font-size:0.95rem;margin-bottom:6px;color:var(--navy-primary);">🎖️ Reading Passport Progression</h4>
+              <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
+                Every active reading sprint, completed chapter, and quiz adds points to your official profile, elevating you through Bronze Scholar 🥉, Book Explorer 🥈, Master Scholar 🥇, and Grand Bibliophile 💎.
+              </p>
+            </div>
+
+            <div>
+              <h4 style="font-size:0.95rem;margin-bottom:6px;color:var(--navy-primary);">💡 Democratic Acquisitions</h4>
+              <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
+                Students actively shape our collections by submitting purchase requests via the "Suggest a Book" desk and voting in bi-weekly book election polls.
+              </p>
+            </div>
+
+            <div>
+              <h4 style="font-size:0.95rem;margin-bottom:6px;color:var(--navy-primary);">🤝 Academic Integrity</h4>
+              <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
+                All resources are curated for safe, age-appropriate learning in adherence to CBSE ethical standards and digital citizenship principles.
+              </p>
+            </div>
+          </div>
         </div>
       </div>`;
   },
@@ -1705,10 +2846,10 @@ const views = {
         <div class="auth-center-wrap">
           <div class="auth-signup-box">
             <div class="auth-header-row">
-              <img src="logo.svg" alt="Viraj School Emblem" class="auth-crest-sm">
+              <img src="logo.png" alt="Viraj School Emblem" class="auth-crest-sm">
               <div>
                 <h2 style="font-size:1.4rem;margin-bottom:2px;">Student & Scholar Registration</h2>
-                <p style="color:var(--text-muted);font-size:0.85rem;">Join the Viraj International School Digital Knowledge Hub</p>
+                <p style="color:var(--text-muted);font-size:0.85rem;">Join the Viraj International School Digital Knowledge Hub (CBSE Kurgaon)</p>
               </div>
             </div>
 
@@ -1770,9 +2911,9 @@ const views = {
           <div class="auth-banner-panel">
             <div class="auth-banner-content">
               <div>
-                <img src="logo.svg" alt="Viraj School Emblem" class="auth-crest-lg">
+                <img src="logo.png" alt="Viraj School Emblem" class="auth-crest-lg">
                 <h3 class="auth-banner-school">VIRAJ INTERNATIONAL SCHOOL</h3>
-                <p class="auth-banner-tagline">Digital Knowledge & Library Hub</p>
+                <p class="auth-banner-tagline">CBSE School • Kurgaon, Boisar</p>
                 <div class="auth-divider"></div>
                 
                 <ul class="auth-features-list">
@@ -1849,12 +2990,31 @@ const views = {
   // 15. LIBRARIAN DASHBOARD
   async admin() {
     if (!isLibrarian()) {
-      return `<div style="text-align:center;padding:60px 20px;"><h3>Access Restricted</h3></div>`;
+      return `
+        <div style="text-align:center;padding:70px 20px;max-width:540px;margin:40px auto;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);box-shadow:var(--shadow-md);">
+          <div style="font-size:3rem;margin-bottom:12px;">🛡️</div>
+          <h2 style="margin-bottom:8px;">Librarian Access Required</h2>
+          <p style="color:var(--text-muted);margin-bottom:24px;">Please log in with your librarian account to add or manage books.</p>
+          <button class="btn btn-gold btn-lg" onclick="go('auth', 'login')">🔑 Log In as Librarian</button>
+        </div>`;
     }
 
-    const stats = await api('admin/stats');
-    const pendingUsers = await api('pending');
-    const allBooks = await api('items');
+    let stats = { books: 0, users: 0, pendingUsers: 0, quizAttempts: 0, suggestions: 0, votes: 0 };
+    let pendingUsers = [];
+    let allBooks = [];
+
+    try {
+      const res = await Promise.all([
+        api('admin/stats').catch(e => { console.warn(e); return stats; }),
+        api('pending').catch(e => { console.warn(e); return []; }),
+        api('items').catch(e => { console.warn(e); return []; })
+      ]);
+      stats = res[0] || stats;
+      pendingUsers = res[1] || [];
+      allBooks = res[2] || [];
+    } catch (err) {
+      console.error('Admin view fetch error:', err);
+    }
 
     return `
       <div class="admin-hub-container">
@@ -1863,7 +3023,11 @@ const views = {
             <h2 style="font-size:1.8rem;margin-bottom:4px;">🛡️ Librarian Dashboard</h2>
             <p style="color:var(--text-muted);font-size:0.9rem;">Manage library resources, user verification, quiz questions, and announcements.</p>
           </div>
-          <button class="btn btn-gold" onclick="$('#addResourcePanel').hidden = !$('#addResourcePanel').hidden">➕ Add New Resource</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-green" onclick="$('#zipImportPanel').hidden = !$('#zipImportPanel').hidden">📦 Auto-Import ZIP of PDFs</button>
+            <button class="btn btn-gold" onclick="$('#addResourcePanel').hidden = !$('#addResourcePanel').hidden">➕ Add Single Resource</button>
+            <button class="btn btn-ghost" onclick="$('#batchImportPanel').hidden = !$('#batchImportPanel').hidden">⚡ Batch Import Drive Links</button>
+          </div>
         </div>
 
         <!-- Overview Analytics -->
@@ -1910,6 +3074,53 @@ const views = {
               <small style="color:var(--text-muted);">Votes</small>
             </div>
           </div>
+        </div>
+
+        <!-- 📦 Smart ZIP Archive Auto-Importer & Classifier Panel -->
+        <div id="zipImportPanel" class="admin-panel-card" hidden style="border-left:4px solid #3b82f6;background:linear-gradient(180deg, var(--bg-surface), var(--bg-secondary));">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-size:1.8rem;">📦</span>
+              <div>
+                <h3 style="margin:0;color:var(--blue-soft);">Smart ZIP Archive Importer & Auto-Sorter</h3>
+                <small style="color:var(--text-muted);">Upload a .zip containing any number of PDF books. System automatically reads metadata, creates clean titles, sorts into wings & categories, and hosts files for 100% in-site reading.</small>
+              </div>
+            </div>
+            <button class="btn btn-xs btn-ghost" onclick="$('#zipImportPanel').hidden = true">✕ Close</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0;">
+            <div class="form-group">
+              <label class="form-label">Wing Assignment Strategy</label>
+              <select id="zipDefaultSection" class="form-control">
+                <option value="" selected>🤖 Smart Auto-Detect (Uses folder names, keywords & PDF metadata)</option>
+                <option value="junior">🧸 Force Junior Library Wing</option>
+                <option value="secondary">📚 Force Secondary Library Wing</option>
+                <option value="biography">👑 Force Biographies Wing</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Student Access Rights</label>
+              <input type="text" class="form-control" value="100% Free School Access • Librarian Permission" readonly style="opacity:0.85;">
+            </div>
+          </div>
+
+          <div style="border:2px dashed var(--blue-soft);border-radius:var(--radius-lg);padding:28px 20px;text-align:center;background:rgba(59, 130, 246, 0.04);margin-bottom:18px;">
+            <div style="font-size:3rem;margin-bottom:8px;">📁</div>
+            <h4 style="margin-bottom:6px;">Select or Drop a .ZIP File with PDF Books</h4>
+            <p style="color:var(--text-muted);font-size:0.88rem;max-width:540px;margin:0 auto 16px;">
+              The system extracts all PDFs, reads page counts, auto-sorts by genre, and immediately adds them to library shelves for free student reading!
+            </p>
+            <input type="file" id="zipArchiveInput" accept=".zip,application/zip" style="display:none;">
+            <button type="button" class="btn btn-blue btn-lg" id="btnSelectZip" onclick="$('#zipArchiveInput').click()">
+              📦 Select ZIP File to Auto-Import
+            </button>
+            <div id="zipUploadProgress" style="margin-top:14px;font-weight:600;font-size:0.9rem;color:var(--blue-soft);" hidden>
+              ⏳ Processing archive, reading PDF metadata & auto-sorting books... Please wait.
+            </div>
+          </div>
+
+          <div id="zipImportResults" style="display:none;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:16px;"></div>
         </div>
 
         <!-- Add Resource Form -->
@@ -1968,11 +3179,77 @@ const views = {
           </div>
 
           <div class="form-group">
-            <label class="form-label">File Attachment (PDF, MP3, Image)</label>
+            <label class="form-label">File Attachment (PDF, MP3, Image from Computer)</label>
             <input id="admFile" type="file" class="form-control">
           </div>
 
+          <div class="form-group">
+            <label class="form-label">Or External / Google Drive Link (URL)</label>
+            <input id="admLink" type="url" class="form-control" placeholder="https://drive.google.com/file/d/... or https://drive.google.com/drive/folders/...">
+            <small style="color:var(--gold-primary);font-size:0.8rem;display:block;margin-top:4px;">
+              🛡️ <strong>In-Site Reading Guarantee:</strong> Google Drive files and folders render 100% inside the website reader without redirecting students! For public student access, ensure Drive sharing is set to <em>"Anyone with the link can view"</em>.
+            </small>
+          </div>
+
           <button class="btn btn-gold btn-lg" id="saveResourceBtn">Save & Add to Library</button>
+        </div>
+
+        <!-- ⚡ Batch Drive Links & Books Importer -->
+        <div id="batchImportPanel" class="admin-panel-card" hidden style="border-left:4px solid #10b981;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <h3 style="margin:0;color:#10b981;">⚡ Batch Import from Google Drive or PDF Links</h3>
+            <button class="btn btn-xs btn-ghost" onclick="$('#batchImportPanel').hidden = true">✕ Close</button>
+          </div>
+          <p style="color:var(--text-secondary);font-size:0.88rem;margin-bottom:14px;line-height:1.5;">
+            Import multiple books into the catalog at once. Simply paste a list of books with their Google Drive links (one per line).<br>
+            <strong>Supported formats:</strong><br>
+            • <code>Book Title | https://drive.google.com/file/d/... | Author Name | Category</code><br>
+            • <code>Book Title - https://drive.google.com/file/d/...</code><br>
+            • Or simply paste a list of Google Drive links directly!
+          </p>
+
+          <div style="background:var(--bg-card);border:1px dashed var(--accent-gold);border-radius:var(--radius-md);padding:14px 18px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+            <div>
+              <strong style="color:var(--accent-gold);font-size:0.95rem;">📄 Have an Index / Catalog PDF with Links?</strong>
+              <div style="font-size:0.82rem;color:var(--text-muted);margin-top:2px;">
+                Upload your master PDF (e.g. folder index or collection list). We will automatically scan and extract all Google Drive links & titles directly into the import box below!
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <input type="file" id="batchPdfInput" accept=".pdf" style="display:none;">
+              <button type="button" class="btn btn-sm btn-gold" id="uploadPdfBtn" onclick="$('#batchPdfInput').click()">📎 Select & Scan PDF</button>
+              <span id="batchPdfStatus" style="font-size:0.82rem;font-weight:600;color:var(--text-secondary);"></span>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:14px;">
+            <div class="form-group">
+              <label class="form-label">Default Library Wing</label>
+              <select id="batchSection" class="form-control">
+                <option value="secondary" selected>Secondary Library Wing</option>
+                <option value="junior">Junior Library Wing</option>
+                <option value="biography">Biographies Wing</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Default Category</label>
+              <input id="batchCategory" class="form-control" type="text" placeholder="e.g. Academics, World Literature, Science" value="General">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Default Grade</label>
+              <input id="batchGrade" class="form-control" type="text" placeholder="e.g. Grades 6 - 10" value="All Grades">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Paste Book Titles & Drive Links (One entry per line)</label>
+            <textarea id="batchText" class="form-control" style="min-height:140px;font-family:monospace;font-size:0.85rem;" placeholder="Physics Class 9 NCERT | https://drive.google.com/file/d/... | NCERT Press | Academics&#10;Goosebumps: Night of the Living Dummy | https://drive.google.com/file/d/... | R.L. Stine | Goosebumps & Horror&#10;Sherlock Holmes: A Study in Scarlet - https://drive.google.com/file/d/..."></textarea>
+          </div>
+
+          <div style="display:flex;gap:12px;align-items:center;">
+            <button class="btn btn-green btn-lg" id="saveBatchBtn">⚡ Run Batch Import</button>
+            <small style="color:var(--text-muted);">Books will be immediately visible across shelves, search, and reading passports.</small>
+          </div>
         </div>
 
         <!-- Pending Approvals -->
@@ -2145,10 +3422,182 @@ const binders = {
         formData.append('read_time', read_time);
         formData.append('content_type', content_type);
         formData.append('description', description);
+        const link = $('#admLink') ? $('#admLink').value.trim() : '';
+        if (link) formData.append('link', link);
         if (fileInput && fileInput.files[0]) formData.append('file', fileInput.files[0]);
 
         await api('items', 'POST', formData);
         showToast('Resource added to library!', 'success');
+        go('admin');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+
+    const zipArchiveInput = $('#zipArchiveInput');
+    if (zipArchiveInput) {
+      zipArchiveInput.onchange = async () => {
+        const file = zipArchiveInput.files[0];
+        if (!file) return;
+        const progressEl = $('#zipUploadProgress');
+        const resultsEl = $('#zipImportResults');
+        const btnSelect = $('#btnSelectZip');
+        const defaultSection = ($('#zipDefaultSection') || {}).value || '';
+
+        try {
+          if (progressEl) {
+            progressEl.hidden = false;
+            progressEl.textContent = `⏳ Uploading and processing "${file.name}"... Unpacking PDFs & auto-sorting genres...`;
+          }
+          if (btnSelect) btnSelect.disabled = true;
+
+          const fd = new FormData();
+          fd.append('zip', file);
+          if (defaultSection) fd.append('default_section', defaultSection);
+
+          const res = await api('admin/import-zip', 'POST', fd);
+
+          if (resultsEl) {
+            const wingsCount = { junior: 0, secondary: 0, biography: 0 };
+            (res.items || []).forEach(b => {
+              if (wingsCount[b.section] !== undefined) wingsCount[b.section]++;
+            });
+
+            resultsEl.style.display = 'block';
+            resultsEl.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border-color);padding-bottom:12px;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                <div style="font-weight:700;color:var(--status-success);font-size:1.05rem;">
+                  🎉 Successfully Auto-Imported & Sorted ${res.count} Books!
+                </div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <span class="meta-chip">🧸 Junior: ${wingsCount.junior}</span>
+                  <span class="meta-chip">📚 Secondary: ${wingsCount.secondary}</span>
+                  <span class="meta-chip">👑 Biographies: ${wingsCount.biography}</span>
+                </div>
+              </div>
+              <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:12px;">
+                All books were extracted, assigned clean titles, categorized, and hosted on the school server. Students can read them 100% free with school library permission!
+              </p>
+              <div style="max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;font-size:0.82rem;">
+                ${(res.items || []).map((b, i) => `
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--bg-secondary);border-radius:6px;">
+                    <div>
+                      <strong>${i + 1}. ${esc(b.title)}</strong>
+                      <span style="color:var(--text-muted);margin-left:6px;">(${esc(b.pages)} pages • ${esc(b.read_time)})</span>
+                    </div>
+                    <span class="meta-chip">${esc(b.section.toUpperCase())} • ${esc(b.category)}</span>
+                  </div>
+                `).join('')}
+              </div>
+              <div style="margin-top:14px;text-align:right;">
+                <button class="btn btn-sm btn-gold" onclick="go('admin')">Refresh Dashboard & Shelves</button>
+              </div>
+            `;
+          }
+
+          showToast(`Successfully extracted, sorted, and added ${res.count} books from ZIP! 📚`, 'success');
+        } catch (err) {
+          showToast(err.message || 'ZIP import failed', 'error');
+          if (progressEl) progressEl.textContent = `❌ Error: ${err.message}`;
+        } finally {
+          if (btnSelect) btnSelect.disabled = false;
+          zipArchiveInput.value = '';
+        }
+      };
+    }
+
+    const batchPdfInput = $('#batchPdfInput');
+    if (batchPdfInput) {
+      batchPdfInput.onchange = async () => {
+        const file = batchPdfInput.files[0];
+        if (!file) return;
+        const statusEl = $('#batchPdfStatus');
+        const uploadBtn = $('#uploadPdfBtn');
+        try {
+          if (statusEl) statusEl.textContent = '⏳ Scanning PDF and extracting book links...';
+          if (uploadBtn) uploadBtn.disabled = true;
+
+          const fd = new FormData();
+          fd.append('pdf', file);
+          const res = await api('admin/extract-pdf-links', 'POST', fd);
+
+          if (!res.items || !res.items.length) {
+            showToast('No hyperlinks or Drive links found inside this PDF.', 'info');
+            if (statusEl) statusEl.textContent = '⚠️ No links found in file.';
+            return;
+          }
+
+          const defaultCategory = $('#batchCategory').value.trim() || 'General';
+          const lines = res.items.map(item => `${item.title} | ${item.url} | Viraj Educational Press | ${defaultCategory}`);
+          const currentText = $('#batchText').value.trim();
+          $('#batchText').value = (currentText ? currentText + '\n' : '') + lines.join('\n');
+
+          showToast(`Extracted ${res.items.length} book links! Review the list below and click 'Run Batch Import'.`, 'success');
+          if (statusEl) statusEl.textContent = `✅ Extracted ${res.items.length} books!`;
+        } catch (err) {
+          showToast(err.message, 'error');
+          if (statusEl) statusEl.textContent = '❌ Extraction failed.';
+        } finally {
+          if (uploadBtn) uploadBtn.disabled = false;
+          batchPdfInput.value = '';
+        }
+      };
+    }
+
+    const saveBatchBtn = $('#saveBatchBtn');
+    if (saveBatchBtn) saveBatchBtn.onclick = async () => {
+      try {
+        const defaultSection = $('#batchSection').value;
+        const defaultCategory = $('#batchCategory').value.trim() || 'General';
+        const defaultGrade = $('#batchGrade').value.trim() || 'All Grades';
+        const rawText = $('#batchText').value.trim();
+        if (!rawText) throw new Error('Please paste your book links or title list.');
+
+        const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+        const parsedItems = [];
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          let title = '';
+          let link = '';
+          let author = 'Viraj Educational Press';
+          let category = defaultCategory;
+
+          if (line.includes('|')) {
+            const parts = line.split('|').map(p => p.trim());
+            title = parts[0];
+            link = parts[1] || '';
+            if (parts[2]) author = parts[2];
+            if (parts[3]) category = parts[3];
+          } else if (line.includes(' - http')) {
+            const idx = line.indexOf(' - http');
+            title = line.substring(0, idx).trim();
+            link = line.substring(idx + 3).trim();
+          } else if (line.startsWith('http://') || line.startsWith('https://')) {
+            link = line;
+            title = `Digital Resource #${i + 1}`;
+          } else {
+            title = line;
+          }
+
+          if (title) {
+            parsedItems.push({
+              section: defaultSection,
+              category,
+              title,
+              author,
+              grade: defaultGrade,
+              read_time: '15 min read',
+              content_type: 'book',
+              link
+            });
+          }
+        }
+
+        if (!parsedItems.length) throw new Error('No valid books or links detected.');
+
+        const res = await api('items/batch', 'POST', { items: parsedItems });
+        showToast(`Successfully imported ${res.count} books & drive links into the library! 📚`, 'success');
         go('admin');
       } catch (err) {
         showToast(err.message, 'error');
@@ -2371,6 +3820,11 @@ function switchLoginRole(role) {
 // Global Window Function Hooks
 window.go = go;
 window.openItem = openItem;
+window.handleBookAction = handleBookAction;
+window.rentBook = rentBook;
+window.returnRental = returnRental;
+window.toggleReaderTheater = toggleReaderTheater;
+window.switchFolderView = switchFolderView;
 window.openPreview = openPreview;
 window.closePreview = closePreview;
 window.toggleBookmark = toggleBookmark;

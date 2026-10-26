@@ -61,6 +61,15 @@ db.exec(`
     primary key(user_id, item_id)
   );
 
+  create table if not exists rentals(
+    id integer primary key,
+    user_id integer,
+    item_id integer,
+    rented_at integer,
+    due_at integer,
+    returned integer default 0
+  );
+
   create table if not exists news(
     id integer primary key,
     title text,
@@ -348,6 +357,13 @@ app.get('/api/me', need, (q, s) => {
   u.usage = all('select kind, count(*) n from usage where user_id=? group by kind', u.id);
   u.recent = all('select kind, title, at from usage where user_id=? order by at desc limit 12', u.id);
   u.bookmarks = all('select i.* from bookmarks b join items i on b.item_id=i.id where b.user_id=? order by b.at desc', u.id);
+  u.rentals = all(`
+    select r.id as rental_id, r.rented_at, r.due_at, r.returned, i.*
+    from rentals r
+    join items i on r.item_id=i.id
+    where r.user_id=? and r.returned=0
+    order by r.rented_at desc
+  `, u.id);
   u.quizHistory = all('select category, score, total, points, at from quiz_history where user_id=? order by at desc limit 10', u.id);
   u.suggestions = all('select id, title, author, category, reason, at from suggestions where user_id=? order by at desc', u.id);
   
@@ -372,6 +388,37 @@ app.post('/api/bookmark/:id', need, (q, s) => {
     run('insert into bookmarks(user_id, item_id, at) values(?, ?, ?)', q.session.uid, itemId, now());
     s.json({ ok: 1, saved: true });
   }
+});
+
+// -------------------------------------------------------------
+// STUDENT LIBRARY BORROWING & DIGITAL LOANS (100% FREE ACCESS)
+// -------------------------------------------------------------
+app.post('/api/rent/:id', need, (q, s) => {
+  const itemId = q.params.id;
+  const book = get('select id, title, section, author from items where id=?', itemId);
+  if (!book) return s.status(404).json({ error: 'Book not found.' });
+
+  const active = get('select id, due_at from rentals where user_id=? and item_id=? and returned=0', q.session.uid, itemId);
+  if (active) {
+    return s.json({ ok: 1, alreadyRented: true, due_at: active.due_at, message: 'This book is already borrowed and active on your Student Reading Passport!' });
+  }
+
+  const loanDuration = 14 * 864e5; // 14-day free school library borrowing period
+  const dueAt = now() + loanDuration;
+  run('insert into rentals(user_id, item_id, rented_at, due_at, returned) values(?, ?, ?, ?, 0)',
+    q.session.uid, itemId, now(), dueAt);
+
+  // Log usage & reward reading passport points
+  run('insert into usage(user_id, kind, title, at) values(?, ?, ?, ?)',
+    q.session.uid, book.section || 'library', `Borrowed: ${book.title}`, now());
+
+  s.json({ ok: 1, rented: true, due_at: dueAt, days_left: 14, title: book.title });
+});
+
+app.post('/api/return/:id', need, (q, s) => {
+  const itemId = q.params.id;
+  run('update rentals set returned=1 where user_id=? and item_id=? and returned=0', q.session.uid, itemId);
+  s.json({ ok: 1, returned: true, message: 'Book returned to library shelves.' });
 });
 
 // -------------------------------------------------------------
@@ -403,29 +450,171 @@ app.get('/api/items', (q, s) => {
   sql += ' order by id desc';
   const items = all(sql, ...params);
   
-  // Attach bookmark status if logged in
+  // Attach bookmark and rental status if logged in
   if (q.session.uid) {
     const userBm = new Set(all('select item_id from bookmarks where user_id=?', q.session.uid).map(b => b.item_id));
-    items.forEach(i => { i.isBookmarked = userBm.has(i.id); });
+    const userRentals = new Set(all('select item_id from rentals where user_id=? and returned=0', q.session.uid).map(r => r.item_id));
+    items.forEach(i => {
+      i.isBookmarked = userBm.has(i.id);
+      i.isRented = userRentals.has(i.id);
+    });
   }
   
   s.json(items);
 });
 
 app.post('/api/items', lib, upload.single('file'), (q, s) => {
-  const { section, category, title, author, grade, read_time, content_type, description, featured, popular } = q.body;
+  const { section, category, title, author, grade, read_time, content_type, description, featured, popular, link } = q.body;
   if (!section || !category || !title) return s.status(400).json({ error: 'Section, Category and Title are required.' });
   
+  const fileVal = q.file ? q.file.filename : (link || q.body.file || null);
+
   run(`
     insert into items(section, category, title, author, grade, read_time, content_type, description, file, featured, popular, at)
     values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
     section, category, title, author || 'Viraj Educational Press', grade || 'All Grades',
     read_time || '10 min read', content_type || 'book', description || '',
-    q.file ? q.file.filename : null,
+    fileVal,
     featured ? 1 : 0, popular ? 1 : 0, now()
   );
   s.json({ ok: 1 });
+});
+
+app.post('/api/items/batch', lib, (q, s) => {
+  const { items } = q.body;
+  if (!Array.isArray(items) || !items.length) {
+    return s.status(400).json({ error: 'Items array is required.' });
+  }
+
+  const ins = db.prepare(`
+    insert into items(section, category, title, author, grade, read_time, content_type, description, file, featured, popular, at)
+    values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  db.exec('BEGIN');
+  let count = 0;
+  const curTime = now();
+  try {
+    for (const item of items) {
+      if (!item.title) continue;
+      ins.run(
+        item.section || 'secondary',
+        item.category || 'General',
+        item.title,
+        item.author || 'Viraj Educational Press',
+        item.grade || 'All Grades',
+        item.read_time || '15 min read',
+        item.content_type || 'book',
+        item.description || '',
+        item.file || item.link || null,
+        item.featured ? 1 : 0,
+        item.popular ? 1 : 0,
+        curTime
+      );
+      count++;
+    }
+    db.exec('COMMIT');
+  } catch(e) {
+    try { db.exec('ROLLBACK'); } catch(re){}
+    return s.status(500).json({ error: 'Failed to batch insert items.' });
+  }
+
+  s.json({ ok: 1, count });
+});
+
+app.post('/api/admin/extract-pdf-links', lib, upload.single('pdf'), (q, s) => {
+  if (!q.file) return s.status(400).json({ error: 'Please upload a PDF file.' });
+  const scriptPath = path.join(__dirname, 'scripts', 'extract_pdf_links.py');
+  const filePath = q.file.path;
+
+  const { execFile } = require('child_process');
+  execFile('python', [scriptPath, filePath, '--json'], { maxBuffer: 15 * 1024 * 1024 }, (err, stdout, stderr) => {
+    try { fs.unlinkSync(filePath); } catch(e){}
+    if (err) {
+      console.error('PDF extraction failed:', stderr || err);
+      return s.status(500).json({ error: 'Could not extract links from this PDF. Ensure the PDF contains hyperlinks.' });
+    }
+    const match = stdout.match(/__JSON_START__(.*?)__JSON_END__/s);
+    if (!match) {
+      return s.status(500).json({ error: 'No structured data received from PDF extractor.' });
+    }
+    try {
+      const items = JSON.parse(match[1]);
+      s.json({ ok: 1, items });
+    } catch(e) {
+      s.status(500).json({ error: 'Failed to parse extracted PDF items.' });
+    }
+  });
+});
+
+app.post('/api/admin/import-zip', lib, upload.single('zip'), (q, s) => {
+  if (!q.file) return s.status(400).json({ error: 'Please upload a ZIP file containing PDFs.' });
+  const scriptPath = path.join(__dirname, 'scripts', 'import_pdf_zip.py');
+  const uploadsDir = path.join(__dirname, 'uploads');
+  const zipPath = q.file.path;
+  const defaultSection = q.body.default_section || '';
+
+  const { execFile } = require('child_process');
+  execFile('python', [scriptPath, zipPath, uploadsDir, defaultSection], { maxBuffer: 30 * 1024 * 1024 }, (err, stdout, stderr) => {
+    try { fs.unlinkSync(zipPath); } catch(e){}
+    if (err) {
+      console.error('ZIP extraction error:', stderr || err);
+      return s.status(500).json({ error: 'Could not process the uploaded ZIP file. Ensure it is a valid ZIP archive containing PDF files.' });
+    }
+    const match = stdout.match(/__JSON_START__(.*?)__JSON_END__/s);
+    if (!match) {
+      return s.status(500).json({ error: 'No structured data received from ZIP archive extractor.' });
+    }
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed.error) {
+        return s.status(400).json({ error: parsed.error });
+      }
+      const items = parsed.items || [];
+      if (!items.length) {
+        return s.status(400).json({ error: 'No valid PDF files could be found inside the ZIP archive.' });
+      }
+
+      // Insert all extracted books into the database in one transaction
+      const ins = db.prepare(`
+        insert into items(section, category, title, author, grade, read_time, content_type, description, file, featured, popular, at)
+        values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      db.exec('BEGIN');
+      let count = 0;
+      const curTime = now();
+      try {
+        for (const item of items) {
+          ins.run(
+            item.section || 'secondary',
+            item.category || 'General',
+            item.title,
+            item.author || 'Viraj Educational Press',
+            item.grade || 'All Grades',
+            item.read_time || '15 min read',
+            item.content_type || 'book',
+            item.description || '',
+            item.file,
+            0, 0,
+            curTime
+          );
+          count++;
+        }
+        db.exec('COMMIT');
+      } catch(e) {
+        try { db.exec('ROLLBACK'); } catch(re){}
+        console.error('Failed to insert ZIP items:', e);
+        return s.status(500).json({ error: 'Failed to insert books into database.' });
+      }
+
+      s.json({ ok: 1, count, items });
+    } catch(e) {
+      console.error('Failed to parse or insert ZIP items:', e);
+      s.status(500).json({ error: 'Failed to process extracted items from ZIP archive.' });
+    }
+  });
 });
 
 app.delete('/api/items/:id', lib, (q, s) => {
@@ -589,19 +778,24 @@ app.delete('/api/readers/:id', lib, (q, s) => {
 // LIBRARIAN / ADMIN DASHBOARD & USER MANAGEMENT
 // -------------------------------------------------------------
 app.get('/api/admin/stats', lib, (q, s) => {
-  const stats = {
-    users: get('select count(*) c from users').c,
-    pendingUsers: get('select count(*) c from users where status="pending"').c,
-    books: get('select count(*) c from items').c,
-    juniorBooks: get('select count(*) c from items where section="junior"').c,
-    secondaryBooks: get('select count(*) c from items where section="secondary"').c,
-    biographies: get('select count(*) c from items where section="biography"').c,
-    quizAttempts: get('select count(*) c from quiz_history').c,
-    suggestions: get('select count(*) c from suggestions').c,
-    votes: get('select count(*) c from votes').c,
-    news: get('select count(*) c from news').c
-  };
-  s.json(stats);
+  try {
+    const stats = {
+      users: get('select count(*) c from users')?.c || 0,
+      pendingUsers: get("select count(*) c from users where status='pending'")?.c || 0,
+      books: get('select count(*) c from items')?.c || 0,
+      juniorBooks: get("select count(*) c from items where section='junior'")?.c || 0,
+      secondaryBooks: get("select count(*) c from items where section='secondary'")?.c || 0,
+      biographies: get("select count(*) c from items where section='biography'")?.c || 0,
+      quizAttempts: get('select count(*) c from quiz_history')?.c || 0,
+      suggestions: get('select count(*) c from suggestions')?.c || 0,
+      votes: get('select count(*) c from votes')?.c || 0,
+      news: get('select count(*) c from news')?.c || 0
+    };
+    s.json(stats);
+  } catch (err) {
+    console.error('Error generating stats:', err);
+    s.status(500).json({ error: 'Failed to calculate stats: ' + err.message });
+  }
 });
 
 app.get('/api/pending', lib, (q, s) => {
@@ -631,6 +825,12 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Fallback to index.html for client-side routing
 app.get('*', (q, s) => {
   s.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Global JSON error handler
+app.use((err, q, s, n) => {
+  console.error('Unhandled server error:', err);
+  s.status(500).json({ error: err.message || 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 3000;
