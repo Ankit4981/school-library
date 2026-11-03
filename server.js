@@ -168,10 +168,41 @@ addCol('candidates', 'description', 'text');
 addCol('readers', 'class_grade', 'text');
 addCol('readers', 'favourite_book', 'text');
 
-// Ensure Default Librarian Account
+// Ensure Default Librarian and Admin Accounts with synchronized credentials
+const defaultAdminPass = process.env.LIBRARIAN_PASSWORD || 'Manasvi@19';
+const hashedAdminPass = bcrypt.hashSync(defaultAdminPass, 10);
+const nowTime = Date.now();
+
+// 1. Librarian account
 if (!db.prepare('select 1 from users where username=?').get('librarian')) {
   db.prepare("insert into users(username,name,email,grade,pw,role,status,at) values('librarian','Head Librarian','librarian@virajis.edu.in','Faculty',?,'librarian','active',?)")
-    .run(bcrypt.hashSync(process.env.LIBRARIAN_PASSWORD || 'ChangeMe123', 10), Date.now());
+    .run(hashedAdminPass, nowTime);
+} else {
+  db.prepare("update users set pw=?, status='active', email=coalesce(email, 'librarian@virajis.edu.in') where username='librarian'").run(hashedAdminPass);
+}
+
+// 2. Ankit admin account
+if (!db.prepare('select 1 from users where username=?').get('ankit')) {
+  db.prepare("insert into users(username,name,email,grade,pw,role,status,at) values('ankit','Ankit Pradhan','ankit@virajis.edu.in','Faculty',?,'admin','active',?)")
+    .run(hashedAdminPass, nowTime);
+} else {
+  db.prepare("update users set pw=?, status='active', email=coalesce(email, 'ankit@virajis.edu.in') where username='ankit'").run(hashedAdminPass);
+}
+
+// 3. Manasvi admin account
+if (!db.prepare('select 1 from users where username=?').get('manasvi')) {
+  db.prepare("insert into users(username,name,email,grade,pw,role,status,at) values('manasvi','Manasvi','manasvi@virajis.edu.in','Faculty',?,'admin','active',?)")
+    .run(hashedAdminPass, nowTime);
+} else {
+  db.prepare("update users set pw=?, status='active' where username='manasvi'").run(hashedAdminPass);
+}
+
+// 4. Manasvi@19 alias username (in case typed into username field)
+if (!db.prepare('select 1 from users where username=?').get('manasvi@19')) {
+  db.prepare("insert into users(username,name,email,grade,pw,role,status,at) values('manasvi@19','Manasvi','manasvi19@virajis.edu.in','Faculty',?,'admin','active',?)")
+    .run(hashedAdminPass, nowTime);
+} else {
+  db.prepare("update users set pw=?, status='active' where username='manasvi@19'").run(hashedAdminPass);
 }
 
 // Seed Starter Library Catalog if empty or sparse
@@ -333,10 +364,11 @@ app.post('/api/signup', (q, s) => {
 
 app.post('/api/login', (q, s) => {
   const cred = (q.body.username || '').toLowerCase().trim();
-  const pass = q.body.password || '';
+  const rawPass = q.body.password || '';
+  const trimmedPass = rawPass.trim();
   const u = get('select * from users where username=? or email=?', cred, cred);
   
-  if (!u || !bcrypt.compareSync(pass, u.pw)) {
+  if (!u || (!bcrypt.compareSync(rawPass, u.pw) && !bcrypt.compareSync(trimmedPass, u.pw))) {
     return s.status(401).json({ error: 'Invalid username/email or password.' });
   }
   if (u.status !== 'active') {
