@@ -63,6 +63,12 @@ body.theme-dark {
   --bg-subtle: #212f4d;
   --bg-hover: #293b5e;
   
+  --navy-dark: #f8fafc;
+  --navy-primary: #93c5fd;
+  --navy-light: #bfdbfe;
+  --blue-accent: #60a5fa;
+  --blue-soft: #93c5fd;
+
   --text-main: #f8fafc;
   --text-secondary: #e2e8f0;
   --text-muted: #94a3b8;
@@ -960,6 +966,38 @@ body.theme-dark .btn-ghost {
   border-color: var(--navy-light);
 }
 
+/* High Contrast Ghost Buttons on Deep Navy Hero & Reader Surfaces */
+.library-hero .btn-ghost {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  backdrop-filter: blur(8px);
+}
+
+.library-hero .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.28) !important;
+  border-color: #ffffff !important;
+  color: #ffffff !important;
+}
+
+.reader-drive-notice .btn-ghost {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.reader-drive-notice .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+.reader-drive-notice .btn-ghost.is-active {
+  background: var(--gold-primary) !important;
+  color: #0f172a !important;
+  border-color: var(--gold-primary) !important;
+  font-weight: 700;
+}
+
 .btn-danger {
   background-color: var(--status-error);
   color: #ffffff;
@@ -1123,9 +1161,10 @@ body.theme-dark .btn-ghost {
 }
 
 .trending-pill:hover {
-  background: rgba(245, 158, 11, 0.25);
-  border-color: #f59e0b;
-  color: #ffffff;
+  background: #f59e0b !important;
+  border-color: #f59e0b !important;
+  color: #0f172a !important;
+  font-weight: 700 !important;
   transform: translateY(-2px);
 }
 
@@ -1207,15 +1246,14 @@ body.theme-dark .btn-ghost {
   height: 100%;
   overflow: hidden;
   position: relative;
-  transform-style: preserve-3d;
-  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(0px) scale(1);
-  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+  transform: translateY(0);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
   will-change: transform;
 }
 
 .book-card:hover {
-  transform: perspective(1000px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-6px) scale(1.02);
-  box-shadow: 0 16px 36px -6px rgba(15, 43, 92, 0.18), 0 0 16px rgba(245, 158, 11, 0.1);
+  transform: translateY(-5px);
+  box-shadow: 0 14px 28px -4px rgba(15, 43, 92, 0.16), 0 0 14px rgba(245, 158, 11, 0.08);
   border-color: var(--navy-light);
   z-index: 5;
 }

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Indian Express Explorer — Youth Student Edition</title>
+  <style>
+    :root {
+      --primary: #991b1b;
+      --navy: #0f172a;
+      --bg: #f9fafb;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --primary: #f87171;
+        --navy: #93c5fd;
+        --bg: #0b1120;
+        --card-bg: #141d30;
+        --text: #f1f5f9;
+        --text-muted: #94a3b8;
+        --border: #1e2a44;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 24px 20px 60px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    header {
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 14px;
+      margin-bottom: 22px;
+    }
+    .top-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .brand-title {
+      font-size: 2.3rem;
+      font-weight: 900;
+      color: var(--primary);
+      letter-spacing: -0.02em;
+    }
+    .brand-motto {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+    .main-feature {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+    .main-feature h2 {
+      font-size: 1.7rem;
+      color: var(--navy);
+      margin-bottom: 10px;
+      line-height: 1.3;
+    }
+    .main-feature p {
+      font-size: 1rem;
+      margin-bottom: 12px;
+      text-align: justify;
+    }
+    .explorer-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .explorer-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .explorer-card h3 {
+      font-size: 1.15rem;
+      color: var(--navy);
+      margin-bottom: 8px;
+    }
+    .explorer-card p {
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
+    footer {
+      margin-top: 28px;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="top-meta">
+      <span>The Indian Express Group</span>
+      <span>•</span>
+      <span>National Explorer Youth Edition</span>
+    </div>
+    <h1 class="brand-title">INDIAN EXPRESS EXPLORER</h1>
+    <p class="brand-motto">Investigating Civics, Scientific Milestones & Student Innovation</p>
+  </header>
+
+  <article class="main-feature">
+    <h2>Clean Ocean Robotics: How High Schoolers Are Removing Microplastics</h2>
+    <p>
+      An inspiring youth collective has engineered autonomous solar skimming drones designed to collect floating microplastics along coastlines. Tested across beaches in western India, these miniature rovers can filter out particles smaller than 5 millimeters using biodegradable nano-mesh membranes.
+    </p>
+    <p>
+      Marine biologists note that such grassroots student inventions demonstrate the enormous power of applied STEM education in addressing real-world environmental crises.
+    </p>
+  </article>
+
+  <div class="explorer-grid">
+    <div class="explorer-card">
+      <h3>🏛️ How Democracy Works</h3>
+      <p>
+        <strong>Understanding the Lok Sabha:</strong> Discover how bills are introduced, debated in parliamentary standing committees, and enacted into law through constitutional checks and balances.
+      </p>
+    </div>
+
+    <div class="explorer-card">
+      <h3>🔭 Astronomical Discovery</h3>
+      <p>
+        <strong>Water Ice Discovered in Lunar Craters:</strong> Recent spectroscopic analysis confirms that permanently shadowed craters at the Moon's South Pole hold billions of metric tons of water ice—vital for future lunar habitats.
+      </p>
+    </div>
+
+    <div class="explorer-card">
+      <h3>🎨 Youth Creative Corner</h3>
+      <p>
+        <strong>Flash Fiction Winner:</strong> <em>“The Clockwork Butterfly”</em> by Rohan V. (Grade 8) – A story about a robotic monarch butterfly that guides an astronaut safely back to base.
+      </p>
+    </div>
+  </div>
+
+  <footer>
+    <p>© The Indian Express Youth Explorer • Educational Digital Access</p>
+  </footer>
+</body>
+</html>
+

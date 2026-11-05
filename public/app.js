@@ -1193,30 +1193,10 @@ function closeQuickPeek() {
   }
 }
 
-// 3D Perspective Tilt on Mouse Movement
+// Card Elevate & Hover Handler (Eliminating sub-pixel jitter)
 function init3DCardTilt() {
-  document.addEventListener('mousemove', e => {
-    const card = e.target.closest('.book-card');
-    if (!card) return;
-    const rect = card.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    const centerX = rect.width / 2;
-    const centerY = rect.height / 2;
-    const rx = ((y - centerY) / centerY) * -8;
-    const ry = ((x - centerX) / centerX) * 8;
-    card.style.setProperty('--rx', `${rx.toFixed(2)}deg`);
-    card.style.setProperty('--ry', `${ry.toFixed(2)}deg`);
-    card.style.setProperty('--mx', `${x.toFixed(1)}px`);
-    card.style.setProperty('--my', `${y.toFixed(1)}px`);
-  });
-
-  document.addEventListener('mouseleave', e => {
-    const card = e.target.closest('.book-card');
-    if (!card) return;
-    card.style.setProperty('--rx', '0deg');
-    card.style.setProperty('--ry', '0deg');
-  }, true);
+  // Smooth hover is handled via CSS transform: translateY(-5px)
+  // Mousemove perspective calculations disabled to prevent font re-rasterization jitter
 }
 
 // Authentic Book Cover Artwork Registry
@@ -1707,7 +1687,7 @@ const views = {
               <p class="newspaper-desc">Daily national current affairs, science focus, vocabulary, and editorial debates.</p>
             </div>
             <div class="newspaper-action">
-              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('The Hindu — In School Edition', '#', 'Daily National Student Newspaper • The Hindu Press')">📖 Read Today's Edition</button>
+              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('The Hindu — In School Edition', '/books/the-hindu-in-school.html', 'Daily National Student Newspaper • The Hindu Press')">📖 Read Today's Edition</button>
             </div>
           </div>
 
@@ -1721,7 +1701,7 @@ const views = {
               <p class="newspaper-desc">Civics, science wonders, literature reviews, and young student columns.</p>
             </div>
             <div class="newspaper-action">
-              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Indian Express Student Explorer', '#', 'Youth Student Edition • Express Media')">📖 Read Today's Edition</button>
+              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Indian Express Student Explorer', '/books/indian-express-explorer.html', 'Youth Student Edition • Express Media')">📖 Read Today's Edition</button>
             </div>
           </div>
 
@@ -1735,7 +1715,7 @@ const views = {
               <p class="newspaper-desc">Global inventions, campus sports, creative writing, and knowledge trivia.</p>
             </div>
             <div class="newspaper-action">
-              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Times NIE — Newspaper in Education', '#', 'Newspaper in Education • Times Group')">📖 Read Today's Edition</button>
+              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Times NIE — Newspaper in Education', '/books/times-nie-edition.html', 'Newspaper in Education • Times Group')">📖 Read Today's Edition</button>
             </div>
           </div>
 
@@ -1749,7 +1729,7 @@ const views = {
               <p class="newspaper-desc">School activities, inter-house championships, book reviews, and notices.</p>
             </div>
             <div class="newspaper-action">
-              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Viraj Campus Chronicle — Weekly Edition', '#', 'Official School Press • Viraj International School')">📖 Read Campus Issue</button>
+              <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Viraj Campus Chronicle — Weekly Edition', '/books/viraj-campus-chronicle.html', 'Official School Press • Viraj International School')">📖 Read Campus Issue</button>
             </div>
           </div>
         </div>
@@ -2308,7 +2288,7 @@ const views = {
                 <p class="newspaper-desc">Daily national current affairs, science focus, vocabulary puzzles, and editorial debates.</p>
               </div>
               <div class="newspaper-action">
-                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('The Hindu — In School Edition', '#', 'Daily National Student Newspaper • The Hindu Press')">📖 Read Digital Edition</button>
+                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('The Hindu — In School Edition', '/books/the-hindu-in-school.html', 'Daily National Student Newspaper • The Hindu Press')">📖 Read Digital Edition</button>
               </div>
             </div>
 
@@ -2322,7 +2302,7 @@ const views = {
                 <p class="newspaper-desc">Civics, science wonders, literature reviews, student debate columns, and global spotlights.</p>
               </div>
               <div class="newspaper-action">
-                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Indian Express Student Explorer', '#', 'Youth Student Edition • Express Media')">📖 Read Digital Edition</button>
+                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Indian Express Student Explorer', '/books/indian-express-explorer.html', 'Youth Student Edition • Express Media')">📖 Read Digital Edition</button>
               </div>
             </div>
 
@@ -2336,7 +2316,7 @@ const views = {
                 <p class="newspaper-desc">Global inventions, campus sports, creative writing showcase, and inter-school knowledge trivia.</p>
               </div>
               <div class="newspaper-action">
-                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Times NIE — Newspaper in Education', '#', 'Newspaper in Education • Times Group')">📖 Read Digital Edition</button>
+                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Times NIE — Newspaper in Education', '/books/times-nie-edition.html', 'Newspaper in Education • Times Group')">📖 Read Digital Edition</button>
               </div>
             </div>
 
@@ -2350,7 +2330,7 @@ const views = {
                 <p class="newspaper-desc">Official school weekly bulletin, inter-house championship tallies, book reviews, and academic events.</p>
               </div>
               <div class="newspaper-action">
-                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Viraj Campus Chronicle — Weekly Edition', '#', 'Official School Press • Viraj International School')">📖 Read Campus Issue</button>
+                <button class="btn btn-sm btn-gold" style="width:100%;" onclick="openPreview('Viraj Campus Chronicle — Weekly Edition', '/books/viraj-campus-chronicle.html', 'Official School Press • Viraj International School')">📖 Read Campus Issue</button>
               </div>
             </div>
           </div>
@@ -3346,6 +3326,16 @@ const binders = {
       };
     } else {
       const btn = $('#submitLoginBtn');
+      const userInp = $('#loginUser');
+      if (userInp) {
+        userInp.addEventListener('input', e => {
+          const val = (e.target.value || '').trim().toLowerCase();
+          if (['librarian', 'ankit', 'manasvi', 'admin'].some(k => val.startsWith(k))) {
+            switchLoginRole('admin');
+          }
+        });
+      }
+
       if (btn) btn.onclick = async () => {
         try {
           const username = ($('#loginUser') || {}).value;
@@ -3369,7 +3359,7 @@ const binders = {
         } catch (err) {
           showToast(err.message, 'error');
           btn.disabled = false;
-          btn.innerHTML = 'Sign In to Library Desk ➡️';
+          btn.innerHTML = $('#roleTabAdmin')?.classList.contains('active') ? 'Sign In to Librarian Hub 🛡️' : 'Sign In to Library Desk ➡️';
         }
       };
     }
@@ -3638,6 +3628,11 @@ const binders = {
 };
 
 async function submitQuickSuggestion() {
+  if (!user) {
+    showToast('Please log in with your student account to submit book recommendations! 📚', 'info');
+    go('auth', 'login');
+    return;
+  }
   const title = ($('#quickSugTitle') || {}).value;
   const author = ($('#quickSugAuthor') || {}).value;
   if (!title) {
