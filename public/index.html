@@ -35,7 +35,25 @@
   <!-- Lucide Line Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   
-  <link rel="stylesheet" href="style.css">
+  <script>
+    // Self-healing: Immediately purge old service worker and cache registrations
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(regs) {
+        for (var i = 0; i < regs.length; i++) {
+          regs[i].unregister();
+        }
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        for (var i = 0; i < names.length; i++) {
+          caches.delete(names[i]);
+        }
+      });
+    }
+  </script>
+
+  <link rel="stylesheet" href="style.css?v=20261105">
   <link rel="icon" type="image/png" href="logo.png">
   <link rel="icon" type="image/svg+xml" href="logo.svg">
 </head>
@@ -464,7 +482,7 @@
     </div>
   </footer>
 
-  <!-- Lucide Icon Initializer & Auto-refresh -->
+  <!-- Lucide Icon Initializer -->
   <script>
     function refreshLucideIcons() {
       if (window.lucide && typeof window.lucide.createIcons === 'function') {
@@ -473,24 +491,25 @@
     }
     document.addEventListener('DOMContentLoaded', refreshLucideIcons);
     window.addEventListener('load', refreshLucideIcons);
-    const appEl = document.getElementById('app');
-    if (appEl && window.MutationObserver) {
-      new MutationObserver(() => {
-        refreshLucideIcons();
-      }).observe(appEl, { childList: true, subtree: true });
-    }
 
-    // Register Progressive Web App (PWA) Service Worker for Tablet & Offline Access
+    // Ensure stale service workers and old caches are cleaned up automatically
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').catch((err) => {
-          console.warn('PWA service worker registration warning:', err);
-        });
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) {
+          reg.unregister();
+        }
+      });
+    }
+    if ('caches' in window) {
+      caches.keys().then((names) => {
+        for (const name of names) {
+          caches.delete(name);
+        }
       });
     }
   </script>
   <!-- GSAP CDN for Stagger & Smooth Transitions -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=20261105"></script>
 </body>
 </html>

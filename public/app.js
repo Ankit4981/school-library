@@ -12,24 +12,502 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[c]));
 
-// API Client Helper
-const api = async (u, m = 'GET', b) => {
-  const r = await fetch('/api/' + u, {
-    method: m,
-    headers: b && !(b instanceof FormData) ? { 'Content-Type': 'application/json' } : {},
-    body: b instanceof FormData ? b : (b ? JSON.stringify(b) : undefined)
-  });
-  const text = await r.text();
-  let d = {};
-  try { d = JSON.parse(text); } catch {}
-  if (!r.ok) throw new Error(d.error || `Request failed (${r.status})`);
-  return d;
+// API Client Helper with safe timeout
+const api = async (u, m = 'GET', b, timeoutMs = 4000) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch('/api/' + u, {
+      method: m,
+      headers: b && !(b instanceof FormData) ? { 'Content-Type': 'application/json' } : {},
+      body: b instanceof FormData ? b : (b ? JSON.stringify(b) : undefined),
+      signal: controller.signal
+    });
+    clearTimeout(timer);
+    const text = await r.text();
+    let d = {};
+    try { d = JSON.parse(text); } catch {}
+    if (!r.ok) throw new Error(d.error || `Request failed (${r.status})`);
+    return d;
+  } catch (err) {
+    clearTimeout(timer);
+    throw err;
+  }
 };
+
+// Baseline starter catalog items from library.db for instant rendering
+const STARTER_LIBRARY_ITEMS = [
+  {
+    "id": 1,
+    "section": "junior",
+    "category": "Nursery Rhymes",
+    "title": "Twinkle Twinkle & Bedtime Rhymes Collection",
+    "file": null,
+    "author": "Traditional Heritage",
+    "grade": "Pre-K - Grade 1",
+    "read_time": "5 min read",
+    "content_type": "book",
+    "description": "A delightful collection of classic rhythmic rhymes with colorful visual stories.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 2,
+    "section": "junior",
+    "category": "Nursery Rhymes",
+    "title": "Wheels on the Bus Singalong Edition",
+    "file": null,
+    "author": "Kids Musical Circle",
+    "grade": "Pre-K - Grade 2",
+    "read_time": "4 min audio",
+    "content_type": "audio",
+    "description": "Energetic singalong rhymes designed to build early vocabulary and phonics.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 3,
+    "section": "junior",
+    "category": "Short Stories",
+    "title": "The Lion and the Clever Rabbit (Panchatantra)",
+    "file": null,
+    "author": "Vishnu Sharma Classics",
+    "grade": "Grades 1 - 3",
+    "read_time": "8 min read",
+    "content_type": "book",
+    "description": "Timeless Panchatantra fable teaching wit, wisdom and peaceful problem solving.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 4,
+    "section": "junior",
+    "category": "Short Stories",
+    "title": "The Magic Mango Tree & Other Moral Tales",
+    "file": null,
+    "author": "Sudha Murty Collection",
+    "grade": "Grades 2 - 4",
+    "read_time": "10 min read",
+    "content_type": "book",
+    "description": "Heartwarming stories of kindness, sharing, and honesty set in Indian villages.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 5,
+    "section": "junior",
+    "category": "Flip Books",
+    "title": "World of Animals: Interactive Illustrated Flip Guide",
+    "file": null,
+    "author": "Viraj Junior Science Hub",
+    "grade": "Grades 1 - 4",
+    "read_time": "12 min read",
+    "content_type": "flipbook",
+    "description": "Turn pages to discover fascinating wildlife habitats, animal sounds, and habits.",
+    "featured": 1,
+    "popular": 0,
+    "at": 1791144189565
+  },
+  {
+    "id": 6,
+    "section": "junior",
+    "category": "Flip Books",
+    "title": "Space Explorers: The Solar System for Young Minds",
+    "file": null,
+    "author": "NASA & Cambridge Kids",
+    "grade": "Grades 2 - 5",
+    "read_time": "15 min read",
+    "content_type": "flipbook",
+    "description": "Take a journey across planets, glowing stars, rocket ships, and moons.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 7,
+    "section": "junior",
+    "category": "Audio",
+    "title": "Bedtime Audio Fairy Tales - Hansel & Gretel",
+    "file": null,
+    "author": "Brothers Grimm (Audio Theatre)",
+    "grade": "Grades 1 - 4",
+    "read_time": "14 min audio",
+    "content_type": "audio",
+    "description": "Full voice-dramatized classic fairy tale with ambient sound effects.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 8,
+    "section": "junior",
+    "category": "Audio",
+    "title": "The Brave Little Hummingbird",
+    "file": null,
+    "author": "Folk Tales of the World",
+    "grade": "Grades 1 - 3",
+    "read_time": "6 min audio",
+    "content_type": "audio",
+    "description": "Inspiring audio fable on courage and doing your part no matter how small you are.",
+    "featured": 0,
+    "popular": 0,
+    "at": 1791144189565
+  },
+  {
+    "id": 9,
+    "section": "secondary",
+    "category": "Academics",
+    "title": "Foundations of Physics & Science Explorer",
+    "file": null,
+    "author": "NCERT & Cambridge Press",
+    "grade": "Grades 6 - 8",
+    "read_time": "25 min read",
+    "content_type": "book",
+    "description": "Clear visual explanations of forces, light, electricity, matter, and atoms.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 10,
+    "section": "secondary",
+    "category": "Academics",
+    "title": "Mastering Mathematics & Logic Puzzles",
+    "file": null,
+    "author": "Prof. Ramanujan Academy",
+    "grade": "Grades 7 - 10",
+    "read_time": "20 min read",
+    "content_type": "book",
+    "description": "Algebraic problem solving, geometric patterns, and math Olympiad training puzzles.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 11,
+    "section": "secondary",
+    "category": "Comics",
+    "title": "Amar Chitra Katha: Epic Heroes & Great Legends",
+    "file": null,
+    "author": "Anant Pai Classics",
+    "grade": "Grades 5 - 9",
+    "read_time": "18 min read",
+    "content_type": "comic",
+    "description": "Vibrant illustrated graphic stories depicting historic heroes and valor.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 12,
+    "section": "secondary",
+    "category": "Comics",
+    "title": "Adventures of Tintin & The Secret Island",
+    "file": null,
+    "author": "Hergé",
+    "grade": "Grades 6 - 10",
+    "read_time": "22 min read",
+    "content_type": "comic",
+    "description": "The iconic reporter and his faithful dog Snowy uncover a global mystery.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 13,
+    "section": "secondary",
+    "category": "Novels",
+    "title": "Around the World in Eighty Days",
+    "file": null,
+    "author": "Jules Verne",
+    "grade": "Grades 6 - 12",
+    "read_time": "45 min read",
+    "content_type": "book",
+    "description": "Phileas Fogg embarks on an unforgettable high-stakes journey across continents.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 14,
+    "section": "secondary",
+    "category": "Novels",
+    "title": "The Adventures of Sherlock Holmes",
+    "file": null,
+    "author": "Sir Arthur Conan Doyle",
+    "grade": "Grades 7 - 12",
+    "read_time": "35 min read",
+    "content_type": "book",
+    "description": "Master detective Sherlock Holmes solves the most perplexing mysteries in Victorian London.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 15,
+    "section": "secondary",
+    "category": "Encyclopedias",
+    "title": "DK Illustrated Visual Science Encyclopedia",
+    "file": null,
+    "author": "DK Publishing",
+    "grade": "Grades 6 - 12",
+    "read_time": "30 min read",
+    "content_type": "encyclopedia",
+    "description": "Thousands of cutting-edge diagrams covering human anatomy, space, geology, and technology.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 16,
+    "section": "secondary",
+    "category": "Audio Books",
+    "title": "Treasure Island - Full Audio Dramatization",
+    "file": null,
+    "author": "Robert Louis Stevenson",
+    "grade": "Grades 6 - 11",
+    "read_time": "40 min audio",
+    "content_type": "audio",
+    "description": "Jim Hawkins sets sail on the Hispaniola in search of buried treasure.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 17,
+    "section": "biography",
+    "category": "Scientists",
+    "title": "Wings of Fire - An Autobiography",
+    "file": null,
+    "author": "Dr. A.P.J. Abdul Kalam",
+    "grade": "Grades 6 - 12",
+    "read_time": "30 min read",
+    "content_type": "biography",
+    "description": "The inspiring story of a boy from Rameswaram who became India Missile Pioneer and President.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 18,
+    "section": "biography",
+    "category": "Scientists",
+    "title": "Albert Einstein: A Life of Genius & Discovery",
+    "file": null,
+    "author": "Walter Isaacson Edition",
+    "grade": "Grades 7 - 12",
+    "read_time": "25 min read",
+    "content_type": "biography",
+    "description": "How a rebellious patent clerk transformed modern understanding of space, time, and gravity.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 19,
+    "section": "biography",
+    "category": "Inventors",
+    "title": "Marie Curie: Courage, Curiosity & Radioactivity",
+    "file": null,
+    "author": "Science Heritage Foundation",
+    "grade": "Grades 6 - 11",
+    "read_time": "22 min read",
+    "content_type": "biography",
+    "description": "The groundbreaking journey of the first woman to win two Nobel Prizes in physics and chemistry.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 20,
+    "section": "biography",
+    "category": "Leaders",
+    "title": "Swami Vivekananda: Inspiring Vision for Youth",
+    "file": null,
+    "author": "Ramakrishna Mission",
+    "grade": "Grades 7 - 12",
+    "read_time": "20 min read",
+    "content_type": "biography",
+    "description": "The awakening message of strength, education, and character building for young minds.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 21,
+    "section": "biography",
+    "category": "Indian Personalities",
+    "title": "Srinivasa Ramanujan: The Man Who Knew Infinity",
+    "file": null,
+    "author": "Robert Kanigel Digest",
+    "grade": "Grades 8 - 12",
+    "read_time": "28 min read",
+    "content_type": "biography",
+    "description": "The pure mathematical genius whose formulas continue to unlock modern black hole physics.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 22,
+    "section": "biography",
+    "category": "Global Personalities",
+    "title": "Mahatma Gandhi: The Story of My Experiments with Truth",
+    "file": null,
+    "author": "M.K. Gandhi Digest",
+    "grade": "Grades 7 - 12",
+    "read_time": "30 min read",
+    "content_type": "biography",
+    "description": "The monumental journey of non-violence, courage, and moral leadership that moved nations.",
+    "featured": 0,
+    "popular": 1,
+    "at": 1791144189565
+  },
+  {
+    "id": 23,
+    "section": "secondary",
+    "category": "Novels",
+    "title": "Goosebumps #19: Deep Trouble",
+    "file": "deep-trouble.html",
+    "author": "R.L. Stine",
+    "grade": "Grades 4 - 8",
+    "read_time": "45 min read",
+    "content_type": "book",
+    "description": "Billy Deep and his sister Sheena visit their marine biologist uncle Dr. D on the Caribbean research boat Cassandra. A real mermaid and a twelve-tentacled sea monster lead them into a dangerous rescue mission against greedy smugglers.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1792216613859
+  },
+  {
+    "id": 24,
+    "section": "secondary",
+    "category": "Novels",
+    "title": "Goosebumps #22: Ghost Beach",
+    "file": "ghost-beach.html",
+    "author": "R.L. Stine",
+    "grade": "Grades 4 - 8",
+    "read_time": "45 min read",
+    "content_type": "book",
+    "description": "Jerry and Terri Sadler spend summer in New England with cousins Brad and Agatha. Exploring a cliffside cave and an ancient graveyard, they uncover headstones bearing the names of their new playmates—and a terrifying 350-year-old secret.",
+    "featured": 1,
+    "popular": 1,
+    "at": 1792213013859
+  },
+  {
+    "id": 25,
+    "section": "secondary",
+    "category": "Novels",
+    "title": "Goosebumps #21: Go Eat Worms!",
+    "file": "go-eat-worms.html",
+    "author": "R.L. Stine",
+    "grade": "Grades 4 - 8",
+    "read_time": "45 min read",
+    "content_type": "book",
+    "description": "Todd Barstow is an avid worm collector preparing his school science expo project. After slicing a live worm in half, worms mysteriously invade his cap, food, and bed—until a monstrous mother worm rises from the earth seeking revenge!",
+    "featured": 1,
+    "popular": 1,
+    "at": 1792209413859
+  },
+  {
+    "id": 26,
+    "section": "secondary",
+    "category": "Novels",
+    "title": "Goosebumps #18: Monster Blood II",
+    "file": "monster-blood-2.html",
+    "author": "R.L. Stine",
+    "grade": "Grades 4 - 8",
+    "read_time": "45 min read",
+    "content_type": "book",
+    "description": "Evan Ross thought the green Monster Blood was gone forever. But when bully Conan Barber torments him and he gets stuck on hamster duty, Andy feeds a spoonful of green slime to Cuddles the hamster—who expands into a 10-foot classroom terror!",
+    "featured": 1,
+    "popular": 1,
+    "at": 1792205813859
+  },
+  {
+    "id": 27,
+    "section": "secondary",
+    "category": "Novels",
+    "title": "Goosebumps #16: One Day at HorrorLand",
+    "file": "one-day-at-horrorland.html",
+    "author": "R.L. Stine",
+    "grade": "Grades 4 - 8",
+    "read_time": "45 min read",
+    "content_type": "book",
+    "description": "The Morris family takes an unexpected turn to HorrorLand, a scary theme park with the Doom Slide and Coffin Cruise. But the scares are dangerously real—the park is run by actual monsters filming for The Monster Channel!",
+    "featured": 1,
+    "popular": 1,
+    "at": 1792202213859
+  },
+  {
+    "id": 28,
+    "section": "biography",
+    "category": "Comics",
+    "title": "Amar chitra katha",
+    "file": "https://drive.google.com/drive/folders/1LvkXH_yMJnQcPvAsqUenn45-f_pZ2Ppu?usp=drive_link",
+    "author": "Amar chitra katha",
+    "grade": "All Grades",
+    "read_time": "10 min read",
+    "content_type": "book",
+    "description": "",
+    "featured": 0,
+    "popular": 0,
+    "at": 1792980334769
+  },
+  {
+    "id": 29,
+    "section": "junior",
+    "category": "Short Stories",
+    "title": "Panchatantra: The Loyal Mongoose",
+    "file": "book_1792985217_1_01_Panchatantra_The_Loyal_Mongoose.pdf",
+    "author": "Pandit Vishnu Sharma",
+    "grade": "Pre-K - Grade 5",
+    "read_time": "5 min read",
+    "content_type": "book",
+    "description": "Complete Short Stories volume in the Viraj Digital Library collection. 1 illustrated pages available for in-site reading.",
+    "featured": 0,
+    "popular": 0,
+    "at": 1792985217732
+  },
+  {
+    "id": 30,
+    "section": "secondary",
+    "category": "Comics",
+    "title": "Amar Chitra Katha: Chanakya the Mastermind",
+    "file": "book_1792985217_2_Amar_Chitra_Katha_Chanakya.pdf",
+    "author": "Anant Pai",
+    "grade": "Grades 6 - 12",
+    "read_time": "5 min read",
+    "content_type": "book",
+    "description": "Complete Comics volume in the Viraj Digital Library collection. 1 illustrated pages available for in-site reading.",
+    "featured": 0,
+    "popular": 0,
+    "at": 1792985217732
+  },
+  {
+    "id": 31,
+    "section": "biography",
+    "category": "Indian Personalities",
+    "title": "APJ Abdul Kalam: My Journey",
+    "file": "book_1792985217_3_Biography_APJ_Abdul_Kalam.pdf",
+    "author": "Dr. A.P.J. Abdul Kalam",
+    "grade": "Grades 5 - 12",
+    "read_time": "5 min read",
+    "content_type": "book",
+    "description": "Complete Indian Personalities volume in the Viraj Digital Library collection. 1 illustrated pages available for in-site reading.",
+    "featured": 0,
+    "popular": 0,
+    "at": 1792985217732
+  }
+];
 
 // Global App State
 let user = null;
 let currentView = 'home';
-let cachedItems = [];
+let cachedItems = [...STARTER_LIBRARY_ITEMS];
 let appState = {
   activeCategory: 'All',
   activeGrade: 'All',
@@ -66,9 +544,9 @@ function showToast(message, type = 'info') {
 
   // Leave after 3 seconds (3000ms) with slide-out animation
   setTimeout(() => {
-    toast.classList.add('toast-leaving');
+    if (toast && toast.classList) toast.classList.add('toast-leaving');
     setTimeout(() => {
-      if (toast.parentNode) toast.remove();
+      if (toast && toast.parentNode) toast.remove();
     }, 250);
   }, 3000);
 }
@@ -2567,11 +3045,12 @@ const views = {
   async home() {
     let allItems = [];
     try {
-      allItems = await api('items');
+      const res = await api('items');
+      allItems = Array.isArray(res) ? res : [];
       cachedItems = allItems;
     } catch (err) {
       console.warn('Catalog items fetch error:', err);
-      allItems = cachedItems || [];
+      allItems = Array.isArray(cachedItems) ? cachedItems : [];
     }
     const goosebumpsBooks = allItems.filter(b => b.title && b.title.includes('Goosebumps'));
     
@@ -2594,7 +3073,7 @@ const views = {
     if (user) {
       try {
         const meData = await api('me');
-        const userSavedBooks = (meData.bookmarks && meData.bookmarks.length) ? meData.bookmarks : [];
+        const userSavedBooks = (meData && Array.isArray(meData.bookmarks) && meData.bookmarks.length) ? meData.bookmarks : [];
         if (userSavedBooks.length) {
           continueReadingContent = `
             <div class="books-shelf-grid">
@@ -2644,14 +3123,23 @@ const views = {
     }
 
     let candidates = [];
-    try { candidates = await api('candidates'); } catch(e){}
-    const totalVotes = candidates.reduce((sum, c) => sum + c.n, 0);
+    try {
+      const cData = await api('candidates');
+      candidates = Array.isArray(cData) ? cData : [];
+    } catch(e){}
+    const totalVotes = candidates.reduce((sum, c) => sum + (c.n || 0), 0);
 
     let latestNews = [];
-    try { latestNews = await api('news?range=week'); } catch(e){}
+    try {
+      const nData = await api('news?range=week');
+      latestNews = Array.isArray(nData) ? nData : [];
+    } catch(e){}
 
     let readers = [];
-    try { readers = await api('readers'); } catch(e){}
+    try {
+      const rData = await api('readers');
+      readers = Array.isArray(rData) ? rData : [];
+    } catch(e){}
     const schoolStar = readers.find(r => r.kind === 'school') || readers[0];
     const digitalStar = readers.find(r => r.kind === 'digital') || readers[1];
 
