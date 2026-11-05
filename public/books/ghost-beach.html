@@ -5,16 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Goosebumps #22: Ghost Beach — Viraj Digital Library Reader</title>
   
+  <!-- Academic & Modern Design System Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800&family=Creepster&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
   
   <style>
     :root {
-      --font-body: 'Lora', Georgia, serif;
-      --font-ui: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
-      --font-title: 'Cinzel', serif;
-      --font-spooky: 'Creepster', cursive;
+      --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-title: 'Playfair Display', Georgia, serif;
+      --font-spooky: 'Playfair Display', Georgia, serif;
       --base-size: 19px;
       --line-height: 1.8;
       
@@ -277,19 +278,94 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.03);
     }
 
-    /* Chapter Presentation */
+    /* Chapter Presentation & 3D Page Stage */
+    .reader-container {
+      perspective: 1200px;
+    }
+
     .chapter-section {
       margin-bottom: 60px;
       display: none;
+      transform-origin: left center;
+      backface-visibility: hidden;
     }
     .chapter-section.is-active {
       display: block;
-      animation: fadeIn 0.3s ease;
     }
 
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
+    /* 3D Page Flip Forward (400ms cubic-bezier) */
+    .chapter-section.flip-forward {
+      animation: pageFlipForward 400ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+    @keyframes pageFlipForward {
+      0% {
+        opacity: 0;
+        transform: rotateY(-36deg) translateX(16px);
+        box-shadow: -15px 0 25px rgba(0,0,0,0.2);
+      }
+      100% {
+        opacity: 1;
+        transform: rotateY(0deg) translateX(0);
+        box-shadow: none;
+      }
+    }
+
+    /* 3D Page Flip Backward (400ms cubic-bezier) */
+    .chapter-section.flip-backward {
+      animation: pageFlipBackward 400ms cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+    @keyframes pageFlipBackward {
+      0% {
+        opacity: 0;
+        transform: rotateY(36deg) translateX(-16px);
+        box-shadow: 15px 0 25px rgba(0,0,0,0.2);
+      }
+      100% {
+        opacity: 1;
+        transform: rotateY(0deg) translateX(0);
+        box-shadow: none;
+      }
+    }
+
+    /* Simple Slide Forward (320ms cubic-bezier) */
+    .chapter-section.slide-forward {
+      animation: pageSlideForward 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes pageSlideForward {
+      0% {
+        opacity: 0;
+        transform: translateX(36px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* Simple Slide Backward (320ms cubic-bezier) */
+    .chapter-section.slide-backward {
+      animation: pageSlideBackward 320ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes pageSlideBackward {
+      0% {
+        opacity: 0;
+        transform: translateX(-36px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .chapter-section.flip-forward,
+      .chapter-section.flip-backward,
+      .chapter-section.slide-forward,
+      .chapter-section.slide-backward {
+        animation: none !important;
+        transform: none !important;
+        opacity: 1 !important;
+      }
     }
 
     .chapter-header {
@@ -438,6 +514,11 @@
         <option value="goosebumps">🧪 Goosebumps</option>
       </select>
 
+      <!-- Transition Mode (3D Page Flip / Simple Slide) -->
+      <button class="control-btn" id="transModeBtn" onclick="toggleTransitionMode()" title="Toggle Page Flip / Slide Transition">
+        <span id="transModeIcon">📖</span> <span class="hide-mobile" id="transModeLabel">3D Flip</span>
+      </button>
+
       <!-- Fullscreen Toggle -->
       <button class="control-btn hide-mobile" onclick="toggleFullscreen()" title="Toggle Fullscreen Reading">
         ⛶ Fullscreen
@@ -455,7 +536,10 @@
     
     <!-- Hero Header / Cover -->
     <div class="book-front-hero">
-      <img src="/covers/ghost-beach.jpg" alt="Ghost Beach Cover" class="book-cover-img">
+      <picture>
+        <source srcset="/covers/ghost-beach.webp" type="image/webp">
+        <img src="/covers/ghost-beach.jpg" alt="Goosebumps #22: Ghost Beach Book Cover" width="260" height="348" loading="eager" decoding="async" class="book-cover-img">
+      </picture>
       <div class="book-badge-series">GOOSEBUMPS SERIES • BOOK #22</div>
       <h1 class="book-main-title">Ghost Beach</h1>
       <p class="book-tagline">“No swimming. No surfing. No haunting.”</p>
@@ -1029,10 +1113,49 @@
       }
     } catch(e) {}
 
-    function updateView() {
+    // Transition Mode (3D Flip vs Smooth Slide)
+    let transitionMode = 'flip';
+    try {
+      transitionMode = localStorage.getItem('gb_trans_mode') || 'flip';
+    } catch(e) {}
+
+    function toggleTransitionMode() {
+      transitionMode = transitionMode === 'flip' ? 'slide' : 'flip';
+      try { localStorage.setItem('gb_trans_mode', transitionMode); } catch(e) {}
+      updateTransitionModeUI();
+    }
+
+    function updateTransitionModeUI() {
+      const icon = document.getElementById('transModeIcon');
+      const label = document.getElementById('transModeLabel');
+      const btn = document.getElementById('transModeBtn');
+      if (icon) icon.textContent = transitionMode === 'flip' ? '📖' : '↔';
+      if (label) label.textContent = transitionMode === 'flip' ? '3D Flip' : 'Slide';
+      if (btn) btn.title = `Page Turn Mode: ${transitionMode === 'flip' ? '3D Page Flip (Click for Slide)' : 'Slide (Click for 3D Flip)'}`;
+    }
+
+    function updateView(direction = 1) {
+      const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
       document.querySelectorAll('.chapter-section').forEach(sec => {
         const ch = parseInt(sec.dataset.chapter);
-        sec.classList.toggle('is-active', ch === currentChapter);
+        const isActive = ch === currentChapter;
+        sec.classList.remove('flip-forward', 'flip-backward', 'slide-forward', 'slide-backward');
+
+        if (isActive) {
+          sec.classList.add('is-active');
+          if (!prefersReduced) {
+            const transClass = transitionMode === 'flip' 
+              ? (direction >= 0 ? 'flip-forward' : 'flip-backward')
+              : (direction >= 0 ? 'slide-forward' : 'slide-backward');
+            sec.classList.add(transClass);
+            setTimeout(() => {
+              sec.classList.remove(transClass);
+            }, 450);
+          }
+        } else {
+          sec.classList.remove('is-active');
+        }
       });
 
       const select = document.getElementById('chapterSelect');
@@ -1061,8 +1184,9 @@
 
     function jumpToChapter(ch) {
       if (ch < 1 || ch > totalChapters) return;
+      const direction = ch >= currentChapter ? 1 : -1;
       currentChapter = ch;
-      updateView();
+      updateView(direction);
     }
 
     // Font Sizing
@@ -1170,7 +1294,8 @@
     } catch(e) {}
 
     // Initial render
-    updateView();
+    updateTransitionModeUI();
+    updateView(1);
   </script>
 </body>
 </html>

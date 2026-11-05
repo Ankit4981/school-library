@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page Not Found — Viraj International School Library</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="icon" type="image/svg+xml" href="/logo.svg">
+  
+  <style>
+    .error-page-container {
+      min-height: 80vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+    }
+    .error-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      max-width: 600px;
+      padding: 48px 36px;
+      margin: 0 auto;
+    }
+    .error-crest {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 20px;
+      display: block;
+    }
+    .error-code {
+      font-family: var(--font-heading);
+      font-size: 4rem;
+      font-weight: 700;
+      color: var(--gold-primary);
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+    .error-title {
+      font-family: var(--font-heading);
+      font-size: 1.8rem;
+      color: var(--navy-primary);
+      margin-bottom: 12px;
+    }
+    body.theme-dark .error-title {
+      color: #93c5fd;
+    }
+    .error-desc {
+      color: var(--text-secondary);
+      font-size: 1rem;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .error-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body class="theme-light">
+  <!-- Skip link -->
+  <a href="#mainErrorContent" class="skip-link">Skip to main content</a>
+
+  <main class="error-page-container" id="mainErrorContent">
+    <div class="error-card">
+      <img src="/logo.png" alt="Viraj International School Crest" class="error-crest" width="80" height="80">
+      <div class="error-code">404</div>
+      <h1 class="error-title">Shelf or Volume Not Found</h1>
+      <p class="error-desc">
+        The book, archive page, or digital resource you requested is unavailable or has been relocated in the digital library stacks.
+      </p>
+      <div class="error-actions">
+        <a href="/" class="btn btn-gold btn-lg" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;">
+          <span>← Return to Library Home</span>
+        </a>
+        <a href="/#secondary" class="btn btn-outline btn-lg" style="text-decoration:none;display:inline-flex;align-items:center;gap:8px;">
+          <span>Explore Book Catalog</span>
+        </a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
+

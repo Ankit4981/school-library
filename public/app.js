@@ -54,24 +54,26 @@ const BIO_CATS = ['All', 'Scientists', 'Inventors', 'Leaders', 'Indian Personali
 // Role Check Helper
 const isLibrarian = () => user && ['librarian', 'admin'].includes(user.role);
 
-// Toast Notification Engine
+// Toast Notification Engine (Slides in Top-Right, leaves after 3 seconds)
 function showToast(message, type = 'info') {
   const container = $('#toastContainer');
   if (!container) return;
   const icons = { success: '✅', error: '⚠️', info: 'ℹ️' };
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<span>${icons[type] || '✨'}</span><span>${esc(message)}</span>`;
+  toast.innerHTML = `<span class="toast-icon">${icons[type] || '✨'}</span><span class="toast-msg">${esc(message)}</span>`;
   container.appendChild(toast);
+
+  // Leave after 3 seconds (3000ms) with slide-out animation
   setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(8px)';
-    toast.style.transition = 'all 0.25s ease';
-    setTimeout(() => toast.remove(), 250);
-  }, 3200);
+    toast.classList.add('toast-leaving');
+    setTimeout(() => {
+      if (toast.parentNode) toast.remove();
+    }, 250);
+  }, 3000);
 }
 
-// Theme Management
+// Theme Management (250ms smooth transition)
 function initTheme() {
   const saved = localStorage.getItem('viraj_lib_theme') || 'light';
   document.body.className = `theme-${saved}`;
@@ -80,12 +82,19 @@ function initTheme() {
 }
 
 function toggleTheme() {
+  // Add temporary transition class for exactly 250ms
+  document.body.classList.add('theme-transitioning');
   const isDark = document.body.classList.contains('theme-dark');
   const next = isDark ? 'light' : 'dark';
-  document.body.className = `theme-${next}`;
+  document.body.classList.remove('theme-light', 'theme-dark');
+  document.body.classList.add(`theme-${next}`);
   localStorage.setItem('viraj_lib_theme', next);
   const icon = $('#themeToggleIcon');
   if (icon) icon.textContent = next === 'dark' ? '☀️' : '🌙';
+
+  setTimeout(() => {
+    document.body.classList.remove('theme-transitioning');
+  }, 260);
 }
 
 // Navigation Dropdown Handlers
@@ -147,6 +156,12 @@ async function go(view, sub) {
     const html = await renderFn(sub);
     A.innerHTML = html;
     if (binders[view]) binders[view](sub);
+    if (window.lucide) window.lucide.createIcons();
+    applyPageStaggerEntrance();
+    init3DCardTilt();
+    if (view === 'home') {
+      initShelfParallax();
+    }
   } catch (err) {
     A.innerHTML = `
       <div style="text-align:center;padding:60px 20px;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);">
@@ -165,6 +180,7 @@ async function boot() {
   initModal();
   FocusTimer.init();
   init3DCardTilt();
+  if (window.lucide) window.lucide.createIcons();
 
   try {
     user = await api('me');
@@ -472,7 +488,15 @@ function initModal() {
   }
 
   window.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closePreview();
+    if (e.key === 'Escape') {
+      closePreview();
+      closeBookDetail();
+      if (typeof closeSurpriseModal === 'function') closeSurpriseModal();
+      if (typeof toggleFocusPanel === 'function') toggleFocusPanel(false);
+      closeDropdowns();
+      const drawer = $('#mobileDrawer');
+      if (drawer && !drawer.hasAttribute('hidden')) toggleMobileMenu();
+    }
   });
 }
 
@@ -515,6 +539,11 @@ async function handleBookAction(id, sec, title, file, author, isAlreadyRented) {
     }
   }
   openItem(id, sec, title, file, author, isAlreadyRented || Boolean(user));
+}
+
+// Borrow/Rent Book action alias
+async function rentBook(id, sec, title, file, author) {
+  return handleBookAction(id, sec, title, file, author, false);
 }
 
 async function returnRental(id, event) {
@@ -588,13 +617,73 @@ async function handleGlobalSearch(query) {
   }
 }
 
-// Ambient Reading Sounds & Focus Tools Nav Handlers
+// Ambient Reading Sounds & Focus Tools Nav Handlers (One Focus Mode Drawer)
+function syncFocusHeaderButton() {
+  const focusBtn = $('#focusModeBtn');
+  const livePill = $('#focusLivePill');
+  const soundPlaying = typeof AmbienceAudio !== 'undefined' && AmbienceAudio.isPlaying && AmbienceAudio.isPlaying();
+  const timerRunning = typeof FocusTimer !== 'undefined' && FocusTimer.isRunning && FocusTimer.isRunning();
+  const digits = $('#timerDigitsDisplay');
+  const timerText = digits ? digits.textContent : '';
+
+  if (focusBtn) {
+    const panel = $('#focusSidePanel');
+    const isPanelOpen = panel && !panel.hasAttribute('hidden') && panel.classList.contains('is-open');
+    focusBtn.classList.toggle('is-active', Boolean(soundPlaying || timerRunning || isPanelOpen));
+  }
+
+  if (livePill) {
+    if (timerRunning && soundPlaying) {
+      livePill.textContent = `${timerText || 'Sprint'} • Sound`;
+      livePill.removeAttribute('hidden');
+    } else if (timerRunning) {
+      livePill.textContent = timerText || 'Sprint';
+      livePill.removeAttribute('hidden');
+    } else if (soundPlaying) {
+      livePill.textContent = 'Audio On';
+      livePill.removeAttribute('hidden');
+    } else {
+      livePill.setAttribute('hidden', '');
+    }
+  }
+}
+
+function toggleFocusPanel(forceState) {
+  const panel = $('#focusSidePanel');
+  const backdrop = $('#focusPanelBackdrop');
+  if (!panel) return;
+
+  const isOpen = !panel.hasAttribute('hidden') && panel.classList.contains('is-open');
+  const shouldOpen = typeof forceState === 'boolean' ? forceState : !isOpen;
+
+  if (shouldOpen) {
+    closeDropdowns();
+    panel.removeAttribute('hidden');
+    if (backdrop) backdrop.removeAttribute('hidden');
+    requestAnimationFrame(() => {
+      panel.classList.add('is-open');
+      if (backdrop) backdrop.classList.add('is-open');
+    });
+    document.body.classList.add('focus-panel-locked');
+    if (window.lucide) window.lucide.createIcons();
+  } else {
+    panel.classList.remove('is-open');
+    if (backdrop) backdrop.classList.remove('is-open');
+    setTimeout(() => {
+      panel.setAttribute('hidden', '');
+      if (backdrop) backdrop.setAttribute('hidden', '');
+    }, 280);
+    document.body.classList.remove('focus-panel-locked');
+  }
+  syncFocusHeaderButton();
+}
+
 function toggleAmbientStudio() {
-  toggleDropdown('ambientStudioPopover');
+  toggleFocusPanel(true);
 }
 
 function toggleFocusTimerWidget() {
-  toggleDropdown('focusTimerPopover');
+  toggleFocusPanel(true);
 }
 
 // =========================================================
@@ -862,6 +951,7 @@ const AmbienceAudio = (() => {
     if (playBtn) {
       playBtn.textContent = isPlaying ? '⏸ Pause Sound' : '▶ Start Sound';
     }
+    syncFocusHeaderButton();
   }
 
   return { select, togglePlay, setVolume, startSound, isPlaying: () => isPlaying };
@@ -900,6 +990,7 @@ const FocusTimer = (() => {
       const progress = remainingSeconds / totalSeconds;
       ring.style.strokeDashoffset = circumference * (1 - progress);
     }
+    syncFocusHeaderButton();
   }
 
   function tick() {
@@ -956,7 +1047,7 @@ const FocusTimer = (() => {
     reset();
   }
 
-  return { toggle, reset, setDuration, init: updateDisplay };
+  return { toggle, reset, setDuration, init: updateDisplay, isRunning: () => isRunning };
 })();
 
 // =========================================================
@@ -1117,9 +1208,10 @@ function closeSurpriseModal() {
 }
 
 // =========================================================
-// ⚡ QUICK PEEK / BOOK SYNOPSIS MODAL
+// ⚡ BOOK DETAIL / SYNOPSIS MODAL & SIMILAR BOOKS ROW
 // =========================================================
-async function openQuickPeek(id) {
+async function openBookDetail(id, event) {
+  if (event) event.stopPropagation();
   const modal = $('#quickPeekModal');
   const body = $('#peekModalBody');
   const titleEl = $('#peekTitle');
@@ -1134,6 +1226,11 @@ async function openQuickPeek(id) {
     return;
   }
 
+  const isSaved = book.isBookmarked || false;
+  const isRented = book.isRented || false;
+  const wingLabel = book.section === 'junior' ? 'Junior Wing (Pre-K - 5)' : (book.section === 'biography' ? 'Biographies & Hall of Fame' : 'Secondary Academic Wing');
+  const wingShort = book.section === 'junior' ? 'JUNIOR' : (book.section === 'biography' ? 'BIOGRAPHY' : 'SECONDARY');
+
   const isGoosebumps = Boolean(book.title && (book.title.includes('Goosebumps') || (book.author && book.author.includes('Stine'))));
   const customCover = BOOK_COVERS[book.title] || (isGoosebumps ? (
     book.title.includes('Deep Trouble') ? '/covers/deep-trouble.jpg' :
@@ -1143,60 +1240,354 @@ async function openQuickPeek(id) {
     book.title.includes('HorrorLand') ? '/covers/one-day-at-horrorland.jpg' : null
   ) : null);
 
-  titleEl.textContent = book.title;
-  metaEl.textContent = `By ${book.author} • ${book.category || 'General'}`;
+  // Similar books from same section or category (excluding current book)
+  const similarBooks = items.filter(b => b.id !== book.id && (b.category === book.category || b.section === book.section)).slice(0, 4);
+
+  if (titleEl) titleEl.textContent = book.title;
+  if (metaEl) metaEl.textContent = `${wingLabel} • By ${book.author || 'Viraj Heritage Press'}`;
 
   body.innerHTML = `
-    <div class="peek-content-grid">
-      <div class="peek-cover-box" style="${customCover ? `background-image:url('${customCover}');` : `background:linear-gradient(135deg, var(--navy-primary), var(--navy-dark));`}">
-        <div style="background:rgba(0,0,0,0.7);padding:4px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">
-          ${isGoosebumps ? '🎃 Goosebumps' : esc(book.section.toUpperCase())}
+    <div class="book-detail-grid">
+      <!-- Left: 3D Book Stage (Perspective 1000px, 26px Spine, Mouse Tilt & Touch Drag) -->
+      <div class="detail-cover-col">
+        <div class="book-3d-stage" id="detail3DStage" aria-label="Interactive 3D Book Display">
+          <div class="book-3d-object" id="detail3DObject">
+            <!-- Front Face: Cover Image or Archival Placeholder -->
+            <div class="book-3d-face book-3d-front">
+              ${customCover ? `
+                <picture>
+                  <source srcset="${esc(customCover.replace('.jpg', '.webp'))}" type="image/webp">
+                  <img src="${esc(customCover)}" alt="${esc(book.title)} book cover" loading="lazy" decoding="async" width="240" height="360" class="detail-cover-img" />
+                </picture>
+              ` : `
+                <div class="book-placeholder-cover placeholder-theme-${book.section || 'secondary'} detail-placeholder">
+                  <div class="placeholder-spine-groove"></div>
+                  <div class="placeholder-frame">
+                    <div class="placeholder-top-row">
+                      <span class="placeholder-wing-tag">${wingShort}</span>
+                      <span class="placeholder-crest-icon"><i data-lucide="book-marked" aria-hidden="true"></i></span>
+                    </div>
+                    <div class="placeholder-title-block">
+                      <h4 class="placeholder-title">${esc(book.title)}</h4>
+                    </div>
+                    <div class="placeholder-bottom-row">
+                      <span class="placeholder-author">${esc(book.author || 'Viraj Heritage Press')}</span>
+                      <span class="placeholder-category-tag">${esc(book.category || 'General')}</span>
+                    </div>
+                  </div>
+                </div>
+              `}
+            </div>
+
+            <!-- Authentic 3D Book Spine (26px) -->
+            <div class="book-3d-face book-3d-spine placeholder-theme-${book.section || 'secondary'}">
+              <div class="spine-gold-emboss">
+                <span class="spine-crest-star">✦</span>
+                <span class="spine-title-vertical">${esc(book.title)}</span>
+                <span class="spine-imprint">VIRAJ</span>
+              </div>
+            </div>
+
+            <!-- Realistic Page Edges (Paper Texture Lines) -->
+            <div class="book-3d-face book-3d-pages-right"></div>
+            <div class="book-3d-face book-3d-pages-top"></div>
+            <div class="book-3d-face book-3d-pages-bottom"></div>
+
+            <!-- Back Cover with Crest Seal & Barcode -->
+            <div class="book-3d-face book-3d-back placeholder-theme-${book.section || 'secondary'}">
+              <div class="back-cover-crease">
+                <div class="back-crest-seal">
+                  <img src="logo.png" alt="" class="back-seal-img" aria-hidden="true">
+                  <div class="back-seal-title">VIRAJ INTERNATIONAL SCHOOL</div>
+                  <div class="back-seal-sub">CBSE Kurgaon • Digital Knowledge Hub</div>
+                </div>
+                <div class="back-barcode-sim">
+                  <span class="barcode-lines">||||| | |||| || ||| | |||||</span>
+                  <span class="barcode-num">ISBN VIS-LIB-${book.id || '2026'}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Dynamic Cast Soft Shadow -->
+          <div class="book-3d-floor-shadow" id="detail3DShadow"></div>
+
+          <!-- Interactive 3D Indicator Hint -->
+          <div class="book-3d-hint-tag">
+            <i data-lucide="box" aria-hidden="true"></i>
+            <span>3D Book • Move mouse / drag to rotate</span>
+          </div>
+
+          <div class="detail-avail-pill ${isRented ? 'is-rented' : 'is-free'}">
+            <i data-lucide="${isRented ? 'check-circle-2' : 'sparkles'}" aria-hidden="true"></i>
+            <span>${isRented ? 'Borrowed (14-Day School Loan)' : 'Available Free • Digital Library'}</span>
+          </div>
         </div>
       </div>
-      <div>
-        <div class="peek-stats-row">
-          <span class="peek-stat-pill">🏷 ${esc(book.category)}</span>
-          <span class="peek-stat-pill">🎓 Grade: ${esc(book.grade || 'All')}</span>
-          <span class="peek-stat-pill">⏱ ${esc(book.read_time || '15 min')}</span>
-          <span class="peek-stat-pill" style="color:var(--status-success);">✓ Digital Web Edition</span>
+
+      <!-- Right: Book Details & Actions -->
+      <div class="detail-info-col">
+        <div class="detail-chips-row">
+          <span class="meta-chip"><i data-lucide="bookmark" aria-hidden="true"></i> ${esc(book.category || 'General')}</span>
+          <span class="meta-chip"><i data-lucide="graduation-cap" aria-hidden="true"></i> ${esc(book.grade || 'All Grades')}</span>
+          <span class="meta-chip"><i data-lucide="clock" aria-hidden="true"></i> ${esc(book.read_time || '10 min read')}</span>
         </div>
-        <h4 style="font-size:1.1rem;margin-bottom:6px;">Synopsis</h4>
-        <p style="font-size:0.88rem;color:var(--text-secondary);line-height:1.5;margin-bottom:18px;">
-          ${esc(book.description || 'Complete reading material registered in the school digital knowledge hub. Accessible anywhere 24/7 on desktop and mobile.')}
-        </p>
-        <div style="background:var(--bg-secondary);padding:10px 14px;border-radius:var(--radius-sm);font-size:0.8rem;color:var(--text-muted);margin-bottom:20px;">
-          💡 <strong>Reader Specs:</strong> Interactive digital reader with 4 color modes (Sepia, Dark, Slime, Light), font sizing, and text-to-speech read-aloud.
+
+        <h2 class="detail-book-title">${esc(book.title)}</h2>
+        <div class="detail-book-author">By <strong>${esc(book.author || 'Viraj Heritage Press')}</strong> • ${wingLabel}</div>
+
+        <div class="detail-summary-box">
+          <h4 class="detail-section-heading">Synopsis & Reader Overview</h4>
+          <p class="detail-summary-text">
+            ${esc(book.description || 'Complete curated reading edition registered in the school digital knowledge hub. Accessible anywhere 24/7 on desktop and tablet.')}
+          </p>
         </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button class="btn btn-gold" onclick="closeQuickPeek(); handleBookAction(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}', ${Boolean(book.isRented)})">
-            📖 Borrow & Read Online (100% Free)
+
+        <div class="detail-specs-box">
+          <i data-lucide="monitor" aria-hidden="true"></i>
+          <span><strong>Reader Specs:</strong> In-site digital viewer with font resizing, 4 themes (Sepia, Light, Dark, Slime), and full-screen theater mode.</span>
+        </div>
+
+        <!-- Action Buttons (Save & Read) -->
+        <div class="detail-actions-row">
+          <button type="button" class="btn btn-gold btn-lg detail-action-btn" onclick="closeBookDetail(); handleBookAction(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}', ${Boolean(isRented)})">
+            <i data-lucide="book-open" aria-hidden="true"></i>
+            <span>${isRented ? 'Read Book (Borrowed)' : 'Borrow & Read Free'}</span>
           </button>
-          <button class="btn btn-ghost" onclick="toggleBookmark(${book.id}, event)">
-            🔖 Bookmark
+          <button type="button" class="btn btn-outline btn-lg detail-action-btn bm-btn-${book.id} ${isSaved ? 'is-saved' : ''}" onclick="toggleBookmark(${book.id}, event)">
+            <i data-lucide="bookmark" aria-hidden="true"></i>
+            <span>${isSaved ? 'Saved to Passport' : 'Save to Passport'}</span>
           </button>
-          <button class="btn btn-ghost" onclick="closeQuickPeek()">
+          <button type="button" class="btn btn-ghost btn-lg detail-action-btn" onclick="closeBookDetail()">
             Close
           </button>
         </div>
       </div>
-    </div>`;
+    </div>
+
+    <!-- Similar Books Row -->
+    ${similarBooks.length ? `
+      <div class="detail-similar-section">
+        <h4 class="detail-similar-heading">
+          <i data-lucide="sparkles" aria-hidden="true"></i> Similar Books in ${esc(book.category || wingLabel)}
+        </h4>
+        <div class="similar-books-grid">
+          ${similarBooks.map(sim => `
+            <div class="similar-book-card" onclick="openBookDetail(${sim.id})">
+              <div class="similar-mini-cover">
+                ${BOOK_COVERS[sim.title] ? `
+                  <img src="${esc(BOOK_COVERS[sim.title])}" alt="${esc(sim.title)}" loading="lazy" width="60" height="90" class="similar-img" />
+                ` : `
+                  <div class="similar-placeholder placeholder-theme-${sim.section || 'secondary'}">
+                    <span>${esc(sim.title).slice(0, 18)}...</span>
+                  </div>
+                `}
+              </div>
+              <div class="similar-info">
+                <strong class="similar-title" title="${esc(sim.title)}">${esc(sim.title)}</strong>
+                <small class="similar-author">${esc(sim.author || 'Viraj Press')}</small>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+  `;
 
   modal.removeAttribute('hidden');
   modal.style.display = 'flex';
+  if (window.lucide) window.lucide.createIcons();
+  initBookDetail3D();
 }
 
-function closeQuickPeek() {
+function closeBookDetail() {
   const modal = $('#quickPeekModal');
   if (modal) {
     modal.setAttribute('hidden', '');
     modal.style.display = 'none';
   }
 }
+const openQuickPeek = openBookDetail;
+const closeQuickPeek = closeBookDetail;
 
-// Card Elevate & Hover Handler (Eliminating sub-pixel jitter)
+// =========================================================
+// 🌟 3D INTERACTIVE BOOK DETAIL (LAPTOP MOUSE / TABLET DRAG)
+// =========================================================
+function initBookDetail3D() {
+  const stage = $('#detail3DStage');
+  const bookObj = $('#detail3DObject');
+  const shadow = $('#detail3DShadow');
+  if (!stage || !bookObj) return;
+
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) {
+    bookObj.style.transform = 'rotateY(-10deg) rotateX(4deg)';
+    return;
+  }
+
+  const defaultRotY = -12;
+  const defaultRotX = 4;
+  let curRotY = defaultRotY;
+  let curRotX = defaultRotX;
+
+  // Set resting 3D angle showing spine
+  bookObj.style.transform = `rotateY(${defaultRotY}deg) rotateX(${defaultRotX}deg)`;
+
+  // Laptop / Desktop mouse tilt
+  const canHover = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+
+  if (canHover) {
+    stage.addEventListener('mousemove', (e) => {
+      const rect = stage.getBoundingClientRect();
+      const xNorm = (e.clientX - rect.left) / rect.width - 0.5;
+      const yNorm = (e.clientY - rect.top) / rect.height - 0.5;
+
+      curRotY = defaultRotY + (xNorm * 28);
+      curRotX = defaultRotX - (yNorm * 18);
+
+      bookObj.style.transition = 'transform 0.08s ease-out';
+      bookObj.style.transform = `rotateY(${curRotY.toFixed(1)}deg) rotateX(${curRotX.toFixed(1)}deg)`;
+
+      if (shadow) {
+        shadow.style.transition = 'transform 0.08s ease-out';
+        shadow.style.transform = `translateX(${(-curRotY * 1.2).toFixed(1)}px) scale(${1 - Math.abs(curRotY) * 0.005})`;
+      }
+    });
+
+    stage.addEventListener('mouseleave', () => {
+      bookObj.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+      bookObj.style.transform = `rotateY(${defaultRotY}deg) rotateX(${defaultRotX}deg)`;
+      if (shadow) {
+        shadow.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+        shadow.style.transform = `translateX(0px) scale(1)`;
+      }
+    });
+  }
+
+  // Tablet touch drag support
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let touchStartRotY = curRotY;
+  let touchStartRotX = curRotX;
+  let isDragging = false;
+
+  stage.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      isDragging = true;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartRotY = curRotY;
+      touchStartRotX = curRotX;
+      bookObj.style.transition = 'none';
+      if (shadow) shadow.style.transition = 'none';
+    }
+  }, { passive: true });
+
+  stage.addEventListener('touchmove', (e) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    const deltaX = e.touches[0].clientX - touchStartX;
+    const deltaY = e.touches[0].clientY - touchStartY;
+
+    curRotY = Math.max(-45, Math.min(25, touchStartRotY + deltaX * 0.35));
+    curRotX = Math.max(-18, Math.min(18, touchStartRotX - deltaY * 0.35));
+
+    bookObj.style.transform = `rotateY(${curRotY.toFixed(1)}deg) rotateX(${curRotX.toFixed(1)}deg)`;
+    if (shadow) {
+      shadow.style.transform = `translateX(${(-curRotY * 1.2).toFixed(1)}px) scale(${1 - Math.abs(curRotY) * 0.005})`;
+    }
+  }, { passive: true });
+
+  stage.addEventListener('touchend', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    bookObj.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+    bookObj.style.transform = `rotateY(${defaultRotY}deg) rotateX(${defaultRotX}deg)`;
+    if (shadow) {
+      shadow.style.transition = 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+      shadow.style.transform = `translateX(0px) scale(1)`;
+    }
+    curRotY = defaultRotY;
+    curRotX = defaultRotX;
+  });
+}
+
+// =========================================================
+// 📚 3D BOOK CARDS TILT (LAPTOP) & SCALE-UP (TABLET)
+// =========================================================
+let cardTiltInitialized = false;
 function init3DCardTilt() {
-  // Smooth hover is handled via CSS transform: translateY(-5px)
-  // Mousemove perspective calculations disabled to prevent font re-rasterization jitter
+  if (cardTiltInitialized) return;
+  cardTiltInitialized = true;
+
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) return;
+
+  // Laptops / Desktops with pointer and hover
+  const canHover = window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+  if (!canHover) {
+    // Tablet: scale-up on tap handled via CSS (.book-card.overlay-active)
+    return;
+  }
+
+  let activeCard = null;
+  let ticking = false;
+
+  document.addEventListener('mousemove', (e) => {
+    const card = e.target.closest('.book-card');
+    if (!card) {
+      if (activeCard) {
+        resetCardTilt(activeCard);
+        activeCard = null;
+      }
+      return;
+    }
+
+    if (activeCard && activeCard !== card) {
+      resetCardTilt(activeCard);
+    }
+    activeCard = card;
+
+    if (!ticking) {
+      requestAnimationFrame(() => {
+        if (!activeCard) { ticking = false; return; }
+        const rect = activeCard.getBoundingClientRect();
+        // Normalized cursor coordinates (-0.5 to 0.5)
+        const x = (e.clientX - rect.left) / rect.width - 0.5;
+        const y = (e.clientY - rect.top) / rect.height - 0.5;
+
+        // Gentle tilt max 8 degrees
+        const rotY = Math.max(-8, Math.min(8, x * 16));
+        const rotX = Math.max(-8, Math.min(8, -y * 16));
+
+        // Moving soft shadow
+        const shadowX = -rotY * 1.5;
+        const shadowY = rotX * 1.5 + 14;
+        const shadowBlur = 24;
+
+        activeCard.style.transform = `perspective(1000px) rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg) translateY(-5px)`;
+        activeCard.style.boxShadow = `${shadowX.toFixed(1)}px ${shadowY.toFixed(1)}px ${shadowBlur}px rgba(15, 23, 42, 0.18)`;
+        ticking = false;
+      });
+      ticking = true;
+    }
+  });
+
+  document.addEventListener('mouseleave', () => {
+    if (activeCard) {
+      resetCardTilt(activeCard);
+      activeCard = null;
+    }
+  });
+}
+
+function resetCardTilt(card) {
+  if (!card) return;
+  card.style.transition = 'transform 0.28s ease-out, box-shadow 0.28s ease-out';
+  card.style.transform = '';
+  card.style.boxShadow = '';
+  setTimeout(() => {
+    if (card) card.style.transition = '';
+  }, 280);
 }
 
 // Authentic Book Cover Artwork Registry
@@ -1208,11 +1599,49 @@ const BOOK_COVERS = {
   'Goosebumps #16: One Day at HorrorLand': '/covers/one-day-at-horrorland.jpg'
 };
 
-// Realistic Digital Book Card Renderer with 3D Tilt & Glare
+// Touch overlay toggle for tablets
+function toggleCardOverlay(cardEl, event) {
+  if (!cardEl) return;
+  if (event && (event.target.closest('button') || event.target.closest('a'))) return;
+  const wasActive = cardEl.classList.contains('overlay-active');
+  document.querySelectorAll('.book-card.overlay-active').forEach(c => c.classList.remove('overlay-active'));
+  if (!wasActive) {
+    cardEl.classList.add('overlay-active');
+  }
+}
+
+window.addEventListener('click', e => {
+  if (!e.target.closest('.book-card')) {
+    document.querySelectorAll('.book-card.overlay-active').forEach(c => c.classList.remove('overlay-active'));
+  }
+});
+
+// Shimmering Skeleton Loader Generator
+function renderBookSkeleton(count = 4) {
+  let skeletons = '';
+  for (let i = 0; i < count; i++) {
+    skeletons += `
+      <div class="book-card book-card-skeleton" aria-hidden="true">
+        <div class="book-cover-container skeleton-shimmer">
+          <div class="skeleton-icon-placeholder"></div>
+        </div>
+        <div class="book-card-info skeleton-info">
+          <div class="skeleton-line skeleton-shimmer" style="width:40%;height:10px;margin-bottom:8px;"></div>
+          <div class="skeleton-line skeleton-shimmer" style="width:85%;height:14px;margin-bottom:8px;"></div>
+          <div class="skeleton-line skeleton-shimmer" style="width:60%;height:11px;"></div>
+        </div>
+      </div>
+    `;
+  }
+  return skeletons;
+}
+
+// Uniform 2:3 Aspect Ratio Book Card Renderer with Archival Placeholders & Hover/Tap Overlay
 function renderBookCard(book) {
   const isSaved = book.isBookmarked || false;
-  let coverClass = 'cover-secondary';
-  let typeIcon = '📖';
+  const isRented = book.isRented || false;
+  const wingLabel = book.section === 'junior' ? 'Junior Wing' : (book.section === 'biography' ? 'Biographies' : 'Secondary Wing');
+  const wingShort = book.section === 'junior' ? 'JUNIOR' : (book.section === 'biography' ? 'BIOGRAPHY' : 'SECONDARY');
 
   const isGoosebumps = Boolean(book.title && (book.title.includes('Goosebumps') || (book.author && book.author.includes('Stine'))));
   const customCover = BOOK_COVERS[book.title] || (isGoosebumps ? (
@@ -1223,60 +1652,911 @@ function renderBookCard(book) {
     book.title.includes('HorrorLand') ? '/covers/one-day-at-horrorland.jpg' : null
   ) : null);
 
-  if (isGoosebumps) {
-    coverClass = 'cover-goosebumps';
-    typeIcon = '🎃';
-  } else if (book.section === 'junior') coverClass = 'cover-junior';
-  else if (book.section === 'biography') coverClass = 'cover-biography';
-  else if (book.category === 'Comics') coverClass = 'cover-comic';
-  else if (book.category === 'Audio Books' || book.content_type === 'audio') coverClass = 'cover-audio';
-  else if (book.category === 'Encyclopedias') coverClass = 'cover-encyclopedia';
-
-  if (book.content_type === 'audio' || (book.file && book.file.match(/\.(mp3|wav|ogg)$/i))) typeIcon = '🎧';
-  else if (book.content_type === 'flipbook') typeIcon = '📑';
-  else if (book.content_type === 'comic') typeIcon = '🎨';
+  const placeholderTheme = `placeholder-theme-${book.section || 'secondary'}`;
 
   return `
-    <div class="book-card ${isGoosebumps ? 'book-card-goosebumps' : ''}">
-      <div class="book-glare"></div>
-      <div class="book-cover-wrap ${coverClass} ${customCover ? 'has-cover-art' : ''}" style="${customCover ? `background-image:url('${customCover}');` : ''}">
-        <div class="book-cover-spine"></div>
-        <div class="book-cover-top">
-          <span class="book-type-badge">${typeIcon} ${isGoosebumps ? 'Goosebumps' : esc(book.category || 'General')}</span>
-          <button class="bookmark-heart-btn bm-btn-${book.id} ${isSaved ? 'is-saved' : ''}" 
-            title="${isSaved ? 'Remove from Saved' : 'Bookmark this book'}" 
-            onclick="toggleBookmark(${book.id}, event)">
-            ${isSaved ? '♥' : '♡'}
+    <div class="book-card ${isGoosebumps ? 'book-card-goosebumps' : ''}" data-id="${book.id}" role="button" tabindex="0" aria-label="${esc(book.title)} by ${esc(book.author || 'Viraj Heritage Press')}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleCardOverlay(this, event);}" onclick="toggleCardOverlay(this, event)">
+      <!-- 2:3 Aspect Ratio Book Cover Container -->
+      <div class="book-cover-container">
+        ${customCover ? `
+          <picture>
+            <source srcset="${esc(customCover.replace('.jpg', '.webp'))}" type="image/webp">
+            <img src="${esc(customCover)}" alt="${esc(book.title)} book cover" loading="lazy" decoding="async" width="200" height="300" class="book-cover-img" />
+          </picture>
+        ` : `
+          <div class="book-placeholder-cover ${placeholderTheme}">
+            <div class="placeholder-spine-groove"></div>
+            <div class="placeholder-frame">
+              <div class="placeholder-top-row">
+                <span class="placeholder-wing-tag">${wingShort}</span>
+                <span class="placeholder-crest-icon"><i data-lucide="book-marked" aria-hidden="true"></i></span>
+              </div>
+              <div class="placeholder-title-block">
+                <h4 class="placeholder-title">${esc(book.title)}</h4>
+              </div>
+              <div class="placeholder-bottom-row">
+                <span class="placeholder-author">${esc(book.author || 'Viraj Heritage Press')}</span>
+                <span class="placeholder-category-tag">${esc(book.category || 'General')}</span>
+              </div>
+            </div>
+          </div>
+        `}
+
+        <!-- Availability Badge on Card -->
+        <div class="book-avail-badge ${isRented ? 'avail-borrowed' : 'avail-free'}">
+          <i data-lucide="${isRented ? 'check-circle-2' : 'sparkles'}" aria-hidden="true"></i>
+          <span>${isRented ? 'Borrowed' : 'Available Free'}</span>
+        </div>
+
+        <!-- Hover (Laptop) & Tap (Tablet) Interactive Overlay -->
+        <div class="book-card-overlay">
+          <div class="overlay-summary-wrap">
+            <span class="overlay-summary-label">Synopsis</span>
+            <p class="overlay-summary-text">${esc(book.description || 'Complete digital reading edition registered in the school library.')}</p>
+          </div>
+
+          <div class="overlay-actions-row">
+            <button type="button" class="btn btn-sm btn-gold overlay-action-btn overlay-read-btn" 
+              onclick="handleBookAction(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}', ${Boolean(isRented)})" 
+              title="Read book">
+              <i data-lucide="book-open" aria-hidden="true"></i> <span>Read</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline overlay-action-btn overlay-save-btn bm-btn-${book.id} ${isSaved ? 'is-saved' : ''}" 
+              onclick="toggleBookmark(${book.id}, event)" 
+              title="${isSaved ? 'Remove from Saved' : 'Save to Passport'}">
+              <i data-lucide="bookmark" aria-hidden="true"></i> <span>${isSaved ? 'Saved' : 'Save'}</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-ghost overlay-action-btn overlay-info-btn" 
+              onclick="openBookDetail(${book.id}, event)" 
+              title="View full synopsis & details">
+              <i data-lucide="info" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Information Section -->
+      <div class="book-card-info" onclick="openBookDetail(${book.id}, event)">
+        <div class="book-info-meta-row">
+          <span class="book-wing-tag">${wingLabel}</span>
+          <span class="book-grade-chip">${esc(book.grade || 'All Grades')}</span>
+        </div>
+        <h3 class="book-card-title" title="${esc(book.title)}">${esc(book.title)}</h3>
+        <div class="book-card-author">By ${esc(book.author || 'Viraj Heritage Press')}</div>
+      </div>
+    </div>
+  `;
+}
+
+// =========================================================
+// HERO SECTION INTERACTIVE SEARCH & FILTER CONTROLLER
+// =========================================================
+function handleHeroSearch(query) {
+  const q = (query || '').trim().toLowerCase();
+  const clearBtn = $('#heroSearchClearBtn');
+  if (clearBtn) clearBtn.hidden = !q;
+  renderHeroFilteredResults();
+}
+
+function handleHeroFilterChange() {
+  renderHeroFilteredResults();
+}
+
+function resetHeroFilters() {
+  const input = $('#heroSearchInput');
+  const wing = $('#heroFilterWing');
+  const genre = $('#heroFilterGenre');
+  const author = $('#heroFilterAuthor');
+  const clearBtn = $('#heroSearchClearBtn');
+  if (input) input.value = '';
+  if (wing) wing.value = 'All';
+  if (genre) genre.value = 'All';
+  if (author) author.value = 'All';
+  if (clearBtn) clearBtn.hidden = true;
+  
+  const dropdown = $('#heroSearchResultsDropdown');
+  if (dropdown) {
+    dropdown.setAttribute('hidden', '');
+    dropdown.innerHTML = '';
+  }
+}
+
+function clearHeroSearch() {
+  const input = $('#heroSearchInput');
+  const clearBtn = $('#heroSearchClearBtn');
+  if (input) {
+    input.value = '';
+    input.focus();
+  }
+  if (clearBtn) clearBtn.hidden = true;
+  renderHeroFilteredResults();
+}
+
+function renderHeroFilteredResults() {
+  const dropdown = $('#heroSearchResultsDropdown');
+  if (!dropdown) return;
+
+  const input = $('#heroSearchInput');
+  const wingSelect = $('#heroFilterWing');
+  const genreSelect = $('#heroFilterGenre');
+  const authorSelect = $('#heroFilterAuthor');
+
+  const q = input ? (input.value || '').trim().toLowerCase() : '';
+  const wing = wingSelect ? wingSelect.value : 'All';
+  const genre = genreSelect ? genreSelect.value : 'All';
+  const author = authorSelect ? authorSelect.value : 'All';
+
+  const isFiltering = q.length >= 2 || wing !== 'All' || genre !== 'All' || author !== 'All';
+
+  if (!isFiltering) {
+    dropdown.setAttribute('hidden', '');
+    dropdown.innerHTML = '';
+    return;
+  }
+
+  const items = cachedItems && cachedItems.length ? cachedItems : [];
+  const filtered = items.filter(b => {
+    if (wing !== 'All' && b.section !== wing) return false;
+    if (genre !== 'All' && b.category !== genre) return false;
+    if (author !== 'All' && b.author !== author) return false;
+    if (q) {
+      const matchTitle = (b.title || '').toLowerCase().includes(q);
+      const matchAuthor = (b.author || '').toLowerCase().includes(q);
+      const matchCat = (b.category || '').toLowerCase().includes(q);
+      const matchDesc = (b.description || '').toLowerCase().includes(q);
+      if (!matchTitle && !matchAuthor && !matchCat && !matchDesc) return false;
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    dropdown.innerHTML = `
+      <div class="hero-search-empty">
+        <span style="font-size:1.5rem;margin-bottom:6px;display:block;"><i data-lucide="search-x" aria-hidden="true"></i></span>
+        <strong style="color:var(--text-main);display:block;margin-bottom:4px;">No matching books found</strong>
+        <span style="color:var(--text-muted);font-size:0.85rem;">Try adjusting your search terms or resetting the Wing/Genre filters.</span>
+      </div>`;
+  } else {
+    dropdown.innerHTML = `
+      <div class="hero-search-results-header">
+        <strong>${filtered.length} MATCHING BOOK${filtered.length === 1 ? '' : 'S'} FOUND</strong>
+        <button type="button" class="hero-search-close-link" onclick="$('#heroSearchResultsDropdown').setAttribute('hidden', '');" aria-label="Close search preview">✕ Close</button>
+      </div>
+      <div class="hero-search-results-list">
+        ${filtered.slice(0, 8).map(b => {
+          const wingLabel = b.section === 'junior' ? 'Junior Wing' : (b.section === 'biography' ? 'Biographies' : 'Secondary Wing');
+          return `
+            <div class="hero-search-result-item" onclick="openItem(${b.id}, '${b.section}', '${esc(b.title).replace(/'/g, "\\'")}', '${esc(b.file || '')}', '${esc(b.author || '').replace(/'/g, "\\'")}'); $('#heroSearchResultsDropdown').setAttribute('hidden', '');">
+              <div class="hero-result-thumb">
+                <i data-lucide="book-open" aria-hidden="true"></i>
+              </div>
+              <div class="hero-result-details">
+                <div class="hero-result-title">${esc(b.title)}</div>
+                <div class="hero-result-meta">
+                  <span class="hero-result-author">${esc(b.author || 'Viraj Library')}</span>
+                  <span class="hero-result-sep">•</span>
+                  <span class="hero-result-cat">${esc(b.category || 'General')}</span>
+                  <span class="hero-result-badge">${wingLabel}</span>
+                </div>
+              </div>
+              <button type="button" class="btn btn-sm btn-gold hero-result-action-btn" aria-label="Read ${esc(b.title)}">
+                Read
+              </button>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      ${filtered.length > 8 ? `
+        <div class="hero-search-more-row">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="executeHeroSearch()">
+            View all ${filtered.length} matching books in library catalog →
           </button>
         </div>
-        <div class="book-cover-title">${esc(book.title)}</div>
-      </div>
+      ` : ''}
+    `;
+  }
 
-      <div class="book-details">
-        <div>
-          <div class="book-author">By ${esc(book.author || 'Viraj Heritage Press')}</div>
-          <div class="book-meta-row">
-            <span class="meta-chip">🎓 ${esc(book.grade || 'All Grades')}</span>
-            <span class="meta-chip">⏱ ${esc(book.read_time || '10 min')}</span>
-            ${isGoosebumps ? '<span class="meta-chip meta-chip-hot">🔥 Full Novel</span>' : ''}
-            ${book.isRented ? '<span class="meta-chip" style="background:var(--status-success-bg);color:var(--status-success);border-color:var(--status-success);font-weight:700;">🟢 Rented</span>' : ''}
-          </div>
-          <p class="book-desc-snippet">${esc(book.description || 'Comprehensive digital reading resource for students and teachers.')}</p>
-        </div>
+  dropdown.removeAttribute('hidden');
+  if (window.lucide) window.lucide.createIcons();
+}
 
-        <div class="book-action-footer">
-          <div class="book-action-footer-grid">
-            <button class="btn btn-sm ${isGoosebumps ? 'btn-green' : (book.isRented ? 'btn-gold' : 'btn-gold')}" style="width:100%;" 
-              onclick="handleBookAction(${book.id}, '${book.section}', '${esc(book.title).replace(/'/g, "\\'")}', '${esc(book.file || '')}', '${esc(book.author || '').replace(/'/g, "\\'")}', ${Boolean(book.isRented)})">
-              ${book.content_type === 'audio' ? '🎧 Listen' : (book.isRented ? '📖 Read (Borrowed)' : '📖 Borrow & Read (Free)')}
-            </button>
-            <button class="btn-peek" onclick="openQuickPeek(${book.id})" title="Quick Peek & Summary">
-              ⚡ Peek
-            </button>
-          </div>
-        </div>
-      </div>
+function executeHeroSearch() {
+  const input = $('#heroSearchInput');
+  const wingSelect = $('#heroFilterWing');
+  const genreSelect = $('#heroFilterGenre');
+
+  const q = input ? (input.value || '').trim() : '';
+  const wing = wingSelect ? wingSelect.value : 'All';
+  const genre = genreSelect ? genreSelect.value : 'All';
+
+  catalogState.search = q;
+  catalogState.section = wing !== 'All' ? wing : 'all';
+  catalogState.category = genre !== 'All' ? genre : 'All';
+  catalogState.page = 1;
+
+  const targetWing = wing !== 'All' ? wing : 'secondary';
+  go(targetWing);
+}
+
+function applyHeroTag(tag, wing) {
+  catalogState.search = tag;
+  catalogState.section = wing || 'all';
+  catalogState.page = 1;
+  go(wing || 'secondary');
+}
+
+// =========================================================
+// 📚 UNIFIED CATALOG BROWSING ENGINE (LAPTOP SIDEBAR + TABLET DRAWER)
+// =========================================================
+const catalogState = {
+  section: 'all', // 'all', 'junior', 'secondary', 'biography'
+  category: 'All',
+  grade: 'All',
+  availability: 'All', // 'All', 'free', 'borrowed'
+  sort: 'newest', // 'newest', 'az', 'popular'
+  search: '',
+  page: 1,
+  pageSize: 8,
+  isDrawerOpen: false
+};
+
+function getFilteredCatalogBooks(items) {
+  return items.filter(b => {
+    if (catalogState.section !== 'all' && b.section !== catalogState.section) return false;
+    if (catalogState.category !== 'All' && b.category !== catalogState.category) return false;
+    if (catalogState.grade !== 'All' && b.grade && !b.grade.toLowerCase().includes(catalogState.grade.toLowerCase())) return false;
+    if (catalogState.availability === 'free' && b.isRented) return false;
+    if (catalogState.availability === 'borrowed' && !b.isRented) return false;
+    if (catalogState.search) {
+      const q = catalogState.search.toLowerCase().trim();
+      const match = (b.title || '').toLowerCase().includes(q) ||
+                    (b.author || '').toLowerCase().includes(q) ||
+                    (b.category || '').toLowerCase().includes(q) ||
+                    (b.description || '').toLowerCase().includes(q);
+      if (!match) return false;
+    }
+    return true;
+  });
+}
+
+function sortCatalogBooks(items) {
+  const copy = [...items];
+  if (catalogState.sort === 'newest') {
+    copy.sort((a, b) => (b.at || b.id) - (a.at || a.id));
+  } else if (catalogState.sort === 'az') {
+    copy.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  } else if (catalogState.sort === 'popular') {
+    copy.sort((a, b) => (b.popular ? 1 : 0) - (a.popular ? 1 : 0) || (b.at || b.id) - (a.at || a.id));
+  }
+  return copy;
+}
+
+function countActiveFilters() {
+  let count = 0;
+  if (catalogState.category !== 'All') count++;
+  if (catalogState.grade !== 'All') count++;
+  if (catalogState.availability !== 'All') count++;
+  if (catalogState.search) count++;
+  if (catalogState.sort !== 'newest') count++;
+  return count;
+}
+
+function renderCatalogActiveChips() {
+  const chips = [];
+  if (catalogState.search) {
+    chips.push(`<span class="active-chip">Search: "${esc(catalogState.search)}" <button type="button" onclick="clearCatalogSearch()" aria-label="Remove search filter">✕</button></span>`);
+  }
+  if (catalogState.section !== 'all') {
+    const wingLabel = catalogState.section === 'junior' ? 'Junior Wing' : (catalogState.section === 'biography' ? 'Biographies' : 'Secondary Wing');
+    chips.push(`<span class="active-chip">Wing: ${wingLabel} <button type="button" onclick="setCatalogWing('all')" aria-label="Remove wing filter">✕</button></span>`);
+  }
+  if (catalogState.category !== 'All') {
+    chips.push(`<span class="active-chip">Genre: ${esc(catalogState.category)} <button type="button" onclick="setCatalogCategory('All')" aria-label="Remove genre filter">✕</button></span>`);
+  }
+  if (catalogState.grade !== 'All') {
+    chips.push(`<span class="active-chip">Grade: ${esc(catalogState.grade)} <button type="button" onclick="setCatalogGrade('All')" aria-label="Remove grade filter">✕</button></span>`);
+  }
+  if (catalogState.availability !== 'All') {
+    chips.push(`<span class="active-chip">Availability: ${catalogState.availability === 'free' ? 'Free (Immediate)' : 'Borrowed'} <button type="button" onclick="setCatalogAvailability('All')" aria-label="Remove availability filter">✕</button></span>`);
+  }
+  if (catalogState.sort !== 'newest') {
+    chips.push(`<span class="active-chip">Sort: ${catalogState.sort === 'az' ? 'A-Z' : 'Popular'} <button type="button" onclick="setCatalogSort('newest')" aria-label="Reset sort">✕</button></span>`);
+  }
+
+  if (!chips.length) return '';
+  return `
+    <div class="active-chips-inner">
+      <span class="active-chips-label"><i data-lucide="check" aria-hidden="true"></i> Active Filters:</span>
+      ${chips.join('')}
+      <button type="button" class="clear-all-chips-btn" onclick="resetCatalogFilters()">Clear All</button>
     </div>`;
+}
+
+async function renderCatalogPage(initialSection = 'all') {
+  catalogState.section = initialSection;
+  catalogState.page = 1;
+
+  if (appState.activeCategory && appState.activeCategory !== 'All') {
+    catalogState.category = appState.activeCategory;
+    appState.activeCategory = 'All';
+  }
+  if (appState.activeGrade && appState.activeGrade !== 'All') {
+    catalogState.grade = appState.activeGrade;
+    appState.activeGrade = 'All';
+  }
+  if (appState.searchFilter) {
+    catalogState.search = appState.searchFilter;
+    appState.searchFilter = '';
+  }
+
+  let items = [];
+  try {
+    items = cachedItems.length ? cachedItems : await api('items');
+    cachedItems = items;
+  } catch (err) {
+    return `
+      <div class="catalog-error-state">
+        <div class="error-state-icon"><i data-lucide="alert-triangle" aria-hidden="true"></i></div>
+        <h3 class="error-state-title">Unable to Load Library Catalog</h3>
+        <p class="error-state-desc">${esc(err.message || 'There was a connection issue loading the catalog items.')}</p>
+        <button class="btn btn-gold btn-md" onclick="retryCatalogFetch('${initialSection}')">
+          <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+          <span>Retry Loading Catalog</span>
+        </button>
+      </div>`;
+  }
+
+  const sectionMeta = {
+    junior: {
+      title: 'Junior Wing (Pre-K - 5)',
+      desc: 'Nursery rhymes, illustrated storybooks, interactive audio, and flipbooks for primary learners.',
+      icon: 'smile',
+      badge: 'Primary Wing'
+    },
+    secondary: {
+      title: 'Secondary Wing (6 - 12)',
+      desc: 'Academics, classic novels, graphic novels, encyclopedias, and R.L. Stine horror series.',
+      icon: 'book-open',
+      badge: 'Middle & Senior'
+    },
+    biography: {
+      title: 'Biographies & Hall of Fame',
+      desc: 'Inspiring life stories of historic scientists, Nobel laureates, world leaders, and thinkers.',
+      icon: 'crown',
+      badge: 'Hall of Fame'
+    },
+    all: {
+      title: 'Complete Library Catalog',
+      desc: 'Browse, filter, and discover all digital books, guides, and literature across all school wings.',
+      icon: 'library',
+      badge: 'All Wings'
+    }
+  };
+
+  const meta = sectionMeta[initialSection] || sectionMeta.all;
+  const sectionItems = initialSection === 'all' ? items : items.filter(b => b.section === initialSection);
+  const distinctCats = ['All', ...new Set(sectionItems.map(b => b.category).filter(Boolean))];
+  const distinctGrades = ['All', ...new Set(sectionItems.map(b => b.grade).filter(Boolean))];
+
+  const filteredAndSorted = sortCatalogBooks(getFilteredCatalogBooks(items));
+  const totalMatches = filteredAndSorted.length;
+  const limit = catalogState.page * catalogState.pageSize;
+  const visibleBooks = filteredAndSorted.slice(0, limit);
+  const hasMore = totalMatches > limit;
+  const remaining = totalMatches - limit;
+  const activeCount = countActiveFilters();
+
+  return `
+    <div class="catalog-page-container">
+      <!-- Catalog Header -->
+      <div class="catalog-page-header">
+        <div class="catalog-header-text">
+          <div class="catalog-section-badge">
+            <i data-lucide="${meta.icon}" aria-hidden="true"></i>
+            <span>${meta.badge}</span>
+          </div>
+          <h1 class="catalog-title">${meta.title}</h1>
+          <p class="catalog-subtitle">${meta.desc}</p>
+        </div>
+        <div class="catalog-header-actions">
+          <span class="catalog-total-pill" id="catalogTotalPill">
+            <i data-lucide="book-marked" aria-hidden="true"></i>
+            <span id="catalogMatchCountText">${totalMatches} Book${totalMatches === 1 ? '' : 's'}</span>
+          </span>
+          ${isLibrarian() ? `
+            <button class="btn btn-gold btn-sm" onclick="go('admin')" style="display:inline-flex;align-items:center;gap:6px;">
+              <i data-lucide="plus" aria-hidden="true"></i> <span>Add Books</span>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- Tablet Filter & Sort Header Bar (768px - 1040px) -->
+      <div class="tablet-filter-header">
+        <div class="tablet-search-wrap">
+          <i data-lucide="search" class="tablet-search-icon" aria-hidden="true"></i>
+          <input
+            type="text"
+            id="tabletShelfSearchInput"
+            class="tablet-search-input"
+            placeholder="Search titles, authors, genres..."
+            value="${esc(catalogState.search)}"
+            oninput="handleCatalogSearch(this.value)"
+          >
+          ${catalogState.search ? `
+            <button type="button" class="tablet-search-clear-btn" onclick="clearCatalogSearch()" aria-label="Clear search">
+              <i data-lucide="x" aria-hidden="true"></i>
+            </button>
+          ` : ''}
+        </div>
+
+        <div class="tablet-filter-actions">
+          <button
+            type="button"
+            class="btn btn-outline tablet-filter-toggle-btn ${activeCount > 0 ? 'is-active' : ''}"
+            onclick="toggleCatalogFilterDrawer()"
+            aria-expanded="false"
+            aria-controls="tabletFilterDrawer"
+          >
+            <i data-lucide="sliders-horizontal" aria-hidden="true"></i>
+            <span>Filters</span>
+            ${activeCount > 0 ? `<span class="filter-count-badge">${activeCount}</span>` : ''}
+          </button>
+
+          <select class="tablet-sort-select" onchange="setCatalogSort(this.value)" aria-label="Sort catalog">
+            <option value="newest" ${catalogState.sort === 'newest' ? 'selected' : ''}>Sort: Newest</option>
+            <option value="az" ${catalogState.sort === 'az' ? 'selected' : ''}>Sort: A-Z</option>
+            <option value="popular" ${catalogState.sort === 'popular' ? 'selected' : ''}>Sort: Popular</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Tablet Collapsible Filter Drawer -->
+      <div id="tabletFilterDrawer" class="tablet-filter-drawer" hidden>
+        <div class="tablet-drawer-inner">
+          <div class="tablet-drawer-row">
+            <label class="filter-label"><i data-lucide="compass" aria-hidden="true"></i> Genre / Category</label>
+            <select class="filter-select" onchange="setCatalogCategory(this.value)">
+              ${distinctCats.map(c => `<option value="${esc(c)}" ${catalogState.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="tablet-drawer-row">
+            <label class="filter-label"><i data-lucide="graduation-cap" aria-hidden="true"></i> Grade Level</label>
+            <select class="filter-select" onchange="setCatalogGrade(this.value)">
+              ${distinctGrades.map(g => `<option value="${esc(g)}" ${catalogState.grade === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}
+            </select>
+          </div>
+
+          <div class="tablet-drawer-row">
+            <label class="filter-label"><i data-lucide="check-circle-2" aria-hidden="true"></i> Availability</label>
+            <select class="filter-select" onchange="setCatalogAvailability(this.value)">
+              <option value="All" ${catalogState.availability === 'All' ? 'selected' : ''}>All Availability</option>
+              <option value="free" ${catalogState.availability === 'free' ? 'selected' : ''}>Available Free (Immediate)</option>
+              <option value="borrowed" ${catalogState.availability === 'borrowed' ? 'selected' : ''}>Currently Borrowed</option>
+            </select>
+          </div>
+
+          <div class="tablet-drawer-footer">
+            <button type="button" class="btn btn-outline btn-sm" onclick="resetCatalogFilters()">
+              <i data-lucide="rotate-ccw" aria-hidden="true"></i> <span>Reset Filters</span>
+            </button>
+            <button type="button" class="btn btn-gold btn-sm" onclick="toggleCatalogFilterDrawer(false)">
+              <i data-lucide="check" aria-hidden="true"></i> <span>Apply Filters</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Catalog Layout (Laptop 2-Column: Sticky Sidebar + Cards) -->
+      <div class="catalog-layout">
+        <!-- Sticky Sidebar on Laptop -->
+        <aside class="catalog-sidebar" aria-label="Catalog Filters">
+          <div class="catalog-sidebar-head">
+            <span class="sidebar-title"><i data-lucide="filter" aria-hidden="true"></i> Filter & Sort</span>
+            ${activeCount > 0 ? `
+              <button type="button" class="sidebar-reset-link" onclick="resetCatalogFilters()">Reset All</button>
+            ` : ''}
+          </div>
+
+          <!-- Search Filter -->
+          <div class="sidebar-filter-group">
+            <label class="sidebar-filter-label" for="sidebarSearchInput">
+              <i data-lucide="search" aria-hidden="true"></i> Search Catalog
+            </label>
+            <div class="sidebar-search-wrap">
+              <input
+                type="text"
+                id="sidebarSearchInput"
+                class="sidebar-search-input"
+                placeholder="Title, author, keywords..."
+                value="${esc(catalogState.search)}"
+                oninput="handleCatalogSearch(this.value)"
+              >
+              ${catalogState.search ? `
+                <button type="button" class="sidebar-search-clear" onclick="clearCatalogSearch()" aria-label="Clear search">✕</button>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- Sort Selector -->
+          <div class="sidebar-filter-group">
+            <label class="sidebar-filter-label">
+              <i data-lucide="arrow-down-up" aria-hidden="true"></i> Sort Books
+            </label>
+            <div class="catalog-sort-pills" role="radiogroup" aria-label="Sort books by">
+              <button
+                type="button"
+                class="sort-pill-btn ${catalogState.sort === 'newest' ? 'is-active' : ''}"
+                onclick="setCatalogSort('newest')"
+              >
+                ✨ Newest
+              </button>
+              <button
+                type="button"
+                class="sort-pill-btn ${catalogState.sort === 'az' ? 'is-active' : ''}"
+                onclick="setCatalogSort('az')"
+              >
+                🔤 A - Z
+              </button>
+              <button
+                type="button"
+                class="sort-pill-btn ${catalogState.sort === 'popular' ? 'is-active' : ''}"
+                onclick="setCatalogSort('popular')"
+              >
+                🔥 Popular
+              </button>
+            </div>
+          </div>
+
+          <!-- Wing Selector -->
+          <div class="sidebar-filter-group">
+            <label class="sidebar-filter-label">
+              <i data-lucide="building" aria-hidden="true"></i> Library Wing
+            </label>
+            <div class="sidebar-wing-list">
+              <button
+                type="button"
+                class="sidebar-option-btn ${catalogState.section === 'all' ? 'is-active' : ''}"
+                onclick="setCatalogWing('all')"
+              >
+                <span>📚 All Wings</span>
+                <span class="option-count">${items.length}</span>
+              </button>
+              <button
+                type="button"
+                class="sidebar-option-btn ${catalogState.section === 'junior' ? 'is-active' : ''}"
+                onclick="setCatalogWing('junior')"
+              >
+                <span>🧸 Junior Wing</span>
+                <span class="option-count">${items.filter(b => b.section === 'junior').length}</span>
+              </button>
+              <button
+                type="button"
+                class="sidebar-option-btn ${catalogState.section === 'secondary' ? 'is-active' : ''}"
+                onclick="setCatalogWing('secondary')"
+              >
+                <span>📖 Secondary Wing</span>
+                <span class="option-count">${items.filter(b => b.section === 'secondary').length}</span>
+              </button>
+              <button
+                type="button"
+                class="sidebar-option-btn ${catalogState.section === 'biography' ? 'is-active' : ''}"
+                onclick="setCatalogWing('biography')"
+              >
+                <span>👑 Biographies</span>
+                <span class="option-count">${items.filter(b => b.section === 'biography').length}</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Category / Genre Filter -->
+          <div class="sidebar-filter-group">
+            <label class="sidebar-filter-label">
+              <i data-lucide="compass" aria-hidden="true"></i> Category / Genre
+            </label>
+            <div class="sidebar-category-chips">
+              ${distinctCats.map(c => `
+                <button
+                  type="button"
+                  class="sidebar-cat-chip ${catalogState.category === c ? 'is-active' : ''}"
+                  onclick="setCatalogCategory('${esc(c)}')"
+                >
+                  ${esc(c)}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Grade Level Filter -->
+          <div class="sidebar-filter-group">
+            <label class="sidebar-filter-label" for="sidebarGradeSelect">
+              <i data-lucide="graduation-cap" aria-hidden="true"></i> Target Grade Level
+            </label>
+            <select id="sidebarGradeSelect" class="sidebar-filter-select" onchange="setCatalogGrade(this.value)">
+              ${distinctGrades.map(g => `<option value="${esc(g)}" ${catalogState.grade === g ? 'selected' : ''}>${esc(g)}</option>`).join('')}
+            </select>
+          </div>
+
+          <!-- Availability Filter -->
+          <div class="sidebar-filter-group">
+            <label class="sidebar-filter-label" for="sidebarAvailSelect">
+              <i data-lucide="check-circle-2" aria-hidden="true"></i> Availability
+            </label>
+            <select id="sidebarAvailSelect" class="sidebar-filter-select" onchange="setCatalogAvailability(this.value)">
+              <option value="All" ${catalogState.availability === 'All' ? 'selected' : ''}>All Titles</option>
+              <option value="free" ${catalogState.availability === 'free' ? 'selected' : ''}>Available Free (Immediate)</option>
+              <option value="borrowed" ${catalogState.availability === 'borrowed' ? 'selected' : ''}>Currently Borrowed</option>
+            </select>
+          </div>
+        </aside>
+
+        <!-- Right: Books Content Grid -->
+        <main class="catalog-main">
+          <!-- Active Filter Chips Bar -->
+          <div class="catalog-active-chips-bar" id="catalogActiveChipsBar">
+            ${renderCatalogActiveChips()}
+          </div>
+
+          <!-- Books Grid -->
+          <div id="catalogCardsContainer" class="books-shelf-grid catalog-grid">
+            ${totalMatches ? visibleBooks.map(renderBookCard).join('') : `
+              <div class="catalog-empty-state">
+                <div class="empty-state-icon"><i data-lucide="search-x" aria-hidden="true"></i></div>
+                <h3 class="empty-state-title">No books found, try another word</h3>
+                <p class="empty-state-desc">We couldn't find any books matching "${esc(catalogState.search || catalogState.category)}". Try checking for typos or resetting your filters.</p>
+                <button type="button" class="btn btn-gold btn-md empty-state-reset-btn" onclick="resetCatalogFilters()">
+                  <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+                  <span>Reset All Filters</span>
+                </button>
+              </div>
+            `}
+          </div>
+
+          <!-- Load More Button -->
+          <div id="catalogLoadMoreWrap" class="catalog-load-more-wrap" ${hasMore ? '' : 'hidden'}>
+            <button type="button" class="btn btn-outline btn-lg load-more-btn" onclick="loadMoreCatalogBooks()">
+              <i data-lucide="chevron-down" aria-hidden="true"></i>
+              <span>Load More Books (${remaining} remaining)</span>
+            </button>
+          </div>
+        </main>
+      </div>
+    </div>
+  `;
+}
+
+function updateCatalogCardsDisplay() {
+  const container = $('#catalogCardsContainer');
+  const countEl = $('#catalogMatchCountText');
+  const chipsEl = $('#catalogActiveChipsBar');
+  const loadMoreWrap = $('#catalogLoadMoreWrap');
+  const loadMoreBtn = loadMoreWrap ? loadMoreWrap.querySelector('button') : null;
+
+  const items = cachedItems && cachedItems.length ? cachedItems : [];
+  const filteredAndSorted = sortCatalogBooks(getFilteredCatalogBooks(items));
+  const totalMatches = filteredAndSorted.length;
+  const limit = catalogState.page * catalogState.pageSize;
+  const visibleBooks = filteredAndSorted.slice(0, limit);
+  const hasMore = totalMatches > limit;
+  const remaining = totalMatches - limit;
+
+  if (countEl) {
+    countEl.textContent = `${totalMatches} Book${totalMatches === 1 ? '' : 's'}`;
+  }
+
+  if (chipsEl) {
+    chipsEl.innerHTML = renderCatalogActiveChips();
+  }
+
+  const toggleBtn = $('.tablet-filter-toggle-btn');
+  const activeCount = countActiveFilters();
+  if (toggleBtn) {
+    toggleBtn.classList.toggle('is-active', activeCount > 0);
+    const badge = toggleBtn.querySelector('.filter-count-badge');
+    if (activeCount > 0) {
+      if (badge) badge.textContent = activeCount;
+      else {
+        const span = document.createElement('span');
+        span.className = 'filter-count-badge';
+        span.textContent = activeCount;
+        toggleBtn.appendChild(span);
+      }
+    } else if (badge) {
+      badge.remove();
+    }
+  }
+
+  $$('.sort-pill-btn').forEach(btn => {
+    btn.classList.toggle('is-active', btn.textContent.toLowerCase().includes(catalogState.sort));
+  });
+  $$('.sidebar-option-btn').forEach(btn => {
+    const isThis = (catalogState.section === 'all' && btn.textContent.includes('All Wings')) ||
+                   (catalogState.section === 'junior' && btn.textContent.includes('Junior')) ||
+                   (catalogState.section === 'secondary' && btn.textContent.includes('Secondary')) ||
+                   (catalogState.section === 'biography' && btn.textContent.includes('Biographies'));
+    btn.classList.toggle('is-active', isThis);
+  });
+  $$('.sidebar-cat-chip').forEach(btn => {
+    btn.classList.toggle('is-active', btn.textContent.trim() === catalogState.category);
+  });
+
+  if (container) {
+    if (!totalMatches) {
+      container.innerHTML = `
+        <div class="catalog-empty-state">
+          <div class="empty-state-icon"><i data-lucide="search-x" aria-hidden="true"></i></div>
+          <h3 class="empty-state-title">No books found, try another word</h3>
+          <p class="empty-state-desc">We couldn't find any books matching "${esc(catalogState.search || catalogState.category)}". Try checking for typos or resetting your filters.</p>
+          <button type="button" class="btn btn-gold btn-md empty-state-reset-btn" onclick="resetCatalogFilters()">
+            <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+            <span>Reset All Filters</span>
+          </button>
+        </div>`;
+    } else {
+      container.innerHTML = visibleBooks.map(renderBookCard).join('');
+    }
+  }
+
+  if (loadMoreWrap) {
+    loadMoreWrap.hidden = !hasMore;
+    if (loadMoreBtn && hasMore) {
+      loadMoreBtn.innerHTML = `
+        <i data-lucide="chevron-down" aria-hidden="true"></i>
+        <span>Load More Books (${remaining} remaining)</span>`;
+    }
+  }
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function handleCatalogSearch(query) {
+  catalogState.search = (query || '').trim();
+  catalogState.page = 1;
+  const sideInp = $('#sidebarSearchInput');
+  const tabInp = $('#tabletShelfSearchInput');
+  if (sideInp && sideInp.value !== query) sideInp.value = query;
+  if (tabInp && tabInp.value !== query) tabInp.value = query;
+  updateCatalogCardsDisplay();
+}
+
+function clearCatalogSearch() {
+  catalogState.search = '';
+  catalogState.page = 1;
+  const sideInp = $('#sidebarSearchInput');
+  const tabInp = $('#tabletShelfSearchInput');
+  if (sideInp) sideInp.value = '';
+  if (tabInp) tabInp.value = '';
+  updateCatalogCardsDisplay();
+}
+
+function setCatalogSort(value) {
+  catalogState.sort = value;
+  catalogState.page = 1;
+  const tabletSelect = $('.tablet-sort-select');
+  if (tabletSelect && tabletSelect.value !== value) tabletSelect.value = value;
+  updateCatalogCardsDisplay();
+}
+
+function setCatalogWing(wing) {
+  catalogState.section = wing;
+  catalogState.page = 1;
+  updateCatalogCardsDisplay();
+}
+
+function setCatalogCategory(cat) {
+  catalogState.category = cat;
+  catalogState.page = 1;
+  updateCatalogCardsDisplay();
+}
+
+function setCatalogGrade(grade) {
+  catalogState.grade = grade;
+  catalogState.page = 1;
+  const sideSelect = $('#sidebarGradeSelect');
+  if (sideSelect) sideSelect.value = grade;
+  updateCatalogCardsDisplay();
+}
+
+function setCatalogAvailability(avail) {
+  catalogState.availability = avail;
+  catalogState.page = 1;
+  const sideSelect = $('#sidebarAvailSelect');
+  if (sideSelect) sideSelect.value = avail;
+  updateCatalogCardsDisplay();
+}
+
+function resetCatalogFilters() {
+  catalogState.search = '';
+  catalogState.category = 'All';
+  catalogState.grade = 'All';
+  catalogState.availability = 'All';
+  catalogState.sort = 'newest';
+  catalogState.page = 1;
+
+  const sideInp = $('#sidebarSearchInput');
+  const tabInp = $('#tabletShelfSearchInput');
+  const sideGrade = $('#sidebarGradeSelect');
+  const sideAvail = $('#sidebarAvailSelect');
+  const tabSort = $('.tablet-sort-select');
+
+  if (sideInp) sideInp.value = '';
+  if (tabInp) tabInp.value = '';
+  if (sideGrade) sideGrade.value = 'All';
+  if (sideAvail) sideAvail.value = 'All';
+  if (tabSort) tabSort.value = 'newest';
+
+  updateCatalogCardsDisplay();
+}
+
+function loadMoreCatalogBooks() {
+  const container = $('#catalogCardsContainer');
+  if (!container) return;
+
+  const items = cachedItems && cachedItems.length ? cachedItems : [];
+  const filteredAndSorted = sortCatalogBooks(getFilteredCatalogBooks(items));
+  const currentCount = catalogState.page * catalogState.pageSize;
+  const nextBatch = filteredAndSorted.slice(currentCount, currentCount + catalogState.pageSize);
+
+  if (!nextBatch.length) return;
+
+  // Insert shimmering skeleton cards
+  const skeletonEl = document.createElement('div');
+  skeletonEl.className = 'skeleton-batch-loader';
+  skeletonEl.innerHTML = renderBookSkeleton(Math.min(4, nextBatch.length));
+  while (skeletonEl.firstChild) {
+    container.appendChild(skeletonEl.firstChild);
+  }
+
+  setTimeout(() => {
+    document.querySelectorAll('.book-card-skeleton').forEach(s => s.remove());
+    catalogState.page++;
+    const totalRendered = catalogState.page * catalogState.pageSize;
+    const hasMore = filteredAndSorted.length > totalRendered;
+    const remaining = filteredAndSorted.length - totalRendered;
+
+    const fragment = document.createRange().createContextualFragment(nextBatch.map(renderBookCard).join(''));
+    container.appendChild(fragment);
+
+    const loadMoreWrap = $('#catalogLoadMoreWrap');
+    if (loadMoreWrap) {
+      loadMoreWrap.hidden = !hasMore;
+      const btn = loadMoreWrap.querySelector('button');
+      if (btn && hasMore) {
+        btn.innerHTML = `<i data-lucide="chevron-down" aria-hidden="true"></i><span>Load More Books (${remaining} remaining)</span>`;
+      }
+    }
+    if (window.lucide) window.lucide.createIcons();
+  }, 240);
+}
+
+function toggleCatalogFilterDrawer(forceState) {
+  const drawer = $('#tabletFilterDrawer');
+  const toggleBtn = $('.tablet-filter-toggle-btn');
+  if (!drawer) return;
+
+  const isOpen = !drawer.hasAttribute('hidden') && drawer.classList.contains('is-open');
+  const shouldOpen = typeof forceState === 'boolean' ? forceState : !isOpen;
+
+  if (shouldOpen) {
+    drawer.removeAttribute('hidden');
+    drawer.classList.add('is-open');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-expanded', 'true');
+      toggleBtn.classList.add('is-drawer-open');
+    }
+  } else {
+    drawer.classList.remove('is-open');
+    drawer.setAttribute('hidden', '');
+    if (toggleBtn) {
+      toggleBtn.setAttribute('aria-expanded', 'false');
+      toggleBtn.classList.remove('is-drawer-open');
+    }
+  }
+}
+
+function retryCatalogFetch(section) {
+  go(section || 'secondary');
 }
 
 // -------------------------------------------------------------
@@ -1285,109 +2565,283 @@ function renderBookCard(book) {
 const views = {
   // 1. HOME VIEW (EXACT 11-PART SEQUENCE)
   async home() {
-    const allItems = await api('items');
-    cachedItems = allItems;
+    let allItems = [];
+    try {
+      allItems = await api('items');
+      cachedItems = allItems;
+    } catch (err) {
+      console.warn('Catalog items fetch error:', err);
+      allItems = cachedItems || [];
+    }
     const goosebumpsBooks = allItems.filter(b => b.title && b.title.includes('Goosebumps'));
     
-    // Balanced diverse featured books across all wings (Junior, Novel, Comic, Biography)
-    const featuredJunior = allItems.find(b => b.section === 'junior' && b.category === 'Short Stories') || allItems.find(b => b.section === 'junior');
-    const featuredNovel = allItems.find(b => b.category === 'Novels') || allItems.find(b => b.section === 'secondary');
-    const featuredComic = allItems.find(b => b.category === 'Comics') || allItems.find(b => b.section === 'secondary');
-    const featuredBio = allItems.find(b => b.section === 'biography' && b.category === 'Scientists') || allItems.find(b => b.section === 'biography');
+    // Real dynamic categories and authors from existing database fields
+    const distinctCategories = [...new Set(allItems.map(b => b.category).filter(Boolean))].sort();
+    const distinctAuthors = [...new Set(allItems.map(b => b.author).filter(Boolean))].sort();
 
-    const featuredBooks = [featuredJunior, featuredNovel, featuredComic, featuredBio].filter(Boolean);
-    const popularBooks = [
-      allItems.find(b => b.category === 'Flip Books'),
-      allItems.find(b => b.category === 'Academics'),
-      allItems.find(b => b.category === 'Encyclopedias'),
-      allItems.find(b => b.section === 'biography' && b.category === 'Inventors')
-    ].filter(Boolean);
-    const recentBooks = allItems.slice(0, 4);
-    const candidates = await api('candidates');
-    const totalVotes = candidates.reduce((sum, c) => sum + c.n, 0);
-    const latestNews = await api('news?range=week');
-    const readers = await api('readers');
-    const schoolStar = readers.find(r => r.kind === 'school') || readers[0];
-    const digitalStar = readers.find(r => r.kind === 'digital') || readers[1];
+    // The 4 Specified Rows Below Hero:
+    // 1. New Arrivals (sorted by b.at || b.id desc)
+    const newArrivals = [...allItems].sort((a, b) => (b.at || b.id) - (a.at || a.id)).slice(0, 4);
 
-    let continueReadingShelf = '';
+    // 2. Most Read This Month (popular === 1 per school database schema)
+    const mostReadMonth = allItems.filter(b => b.popular === 1).slice(0, 4);
+
+    // 3. Recommended for Junior Wing (section === 'junior')
+    const recommendedJunior = allItems.filter(b => b.section === 'junior').slice(0, 4);
+
+    // 4. Continue Reading Shelf (user bookmarks/rentals when logged in, or prompt cards)
+    let continueReadingContent = '';
     if (user) {
       try {
         const meData = await api('me');
-        if (meData.bookmarks && meData.bookmarks.length) {
-          continueReadingShelf = `
-            <!-- 3. Continue Reading / Saved Bookmarks -->
-            <section class="home-section">
-              <div class="section-header-row">
-                <h3 class="section-title">📖 Continue Reading & Saved Shelf</h3>
-                <span class="section-link" onclick="go('bookmarks')">View Reading Passport →</span>
+        const userSavedBooks = (meData.bookmarks && meData.bookmarks.length) ? meData.bookmarks : [];
+        if (userSavedBooks.length) {
+          continueReadingContent = `
+            <div class="books-shelf-grid">
+              ${userSavedBooks.slice(0, 4).map(renderBookCard).join('')}
+            </div>`;
+        } else {
+          continueReadingContent = `
+            <div class="continue-reading-empty-card">
+              <div class="cr-empty-icon"><i data-lucide="bookmark-plus" aria-hidden="true"></i></div>
+              <div class="cr-empty-text">
+                <h4 class="cr-empty-title">Your Reading Passport is Ready</h4>
+                <p class="cr-empty-desc">You haven't saved any books yet. Click "Save" on any book card to keep it on your personal shelf.</p>
               </div>
-              <div class="books-shelf-grid">
-                ${meData.bookmarks.slice(0, 4).map(renderBookCard).join('')}
-              </div>
-            </section>`;
+              <button class="btn btn-gold btn-sm" onclick="go('secondary')">
+                <i data-lucide="compass" aria-hidden="true"></i> <span>Explore Catalog</span>
+              </button>
+            </div>`;
         }
       } catch (e) {
-        continueReadingShelf = '';
+        continueReadingContent = `
+          <div class="continue-reading-empty-card">
+            <div class="cr-empty-icon"><i data-lucide="bookmark" aria-hidden="true"></i></div>
+            <div class="cr-empty-text">
+              <h4 class="cr-empty-title">Continue Reading</h4>
+              <p class="cr-empty-desc">Explore our digital collection and save books to your personal shelf.</p>
+            </div>
+            <button class="btn btn-gold btn-sm" onclick="go('secondary')">Browse Books</button>
+          </div>`;
       }
+    } else {
+      continueReadingContent = `
+        <div class="continue-reading-empty-card guest-card">
+          <div class="cr-empty-icon"><i data-lucide="user-check" aria-hidden="true"></i></div>
+          <div class="cr-empty-text">
+            <h4 class="cr-empty-title">Personalized Continue Reading Shelf</h4>
+            <p class="cr-empty-desc">Sign in with your Scholar ID to save books to your personal shelf and resume reading across devices.</p>
+          </div>
+          <div class="cr-guest-actions">
+            <button class="btn btn-gold btn-sm" onclick="go('auth', 'login')">
+              <i data-lucide="log-in" aria-hidden="true"></i> <span>Scholar Login</span>
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="go('auth', 'signup')">
+              <i data-lucide="user-plus" aria-hidden="true"></i> <span>Join Hub</span>
+            </button>
+          </div>
+        </div>`;
     }
+
+    let candidates = [];
+    try { candidates = await api('candidates'); } catch(e){}
+    const totalVotes = candidates.reduce((sum, c) => sum + c.n, 0);
+
+    let latestNews = [];
+    try { latestNews = await api('news?range=week'); } catch(e){}
+
+    let readers = [];
+    try { readers = await api('readers'); } catch(e){}
+    const schoolStar = readers.find(r => r.kind === 'school') || readers[0];
+    const digitalStar = readers.find(r => r.kind === 'digital') || readers[1];
 
     return `
       <!-- 1. Hero Section -->
-      <section class="library-hero">
-        <div class="hero-left">
-          <div class="hero-sub-badge">
-            <span class="hero-live-dot"></span>
-            <span>VIRAJ INTERNATIONAL SCHOOL • 100% FREE STUDENT ACCESS</span>
+      <section class="library-hero" id="heroSection">
+        <div class="hero-crest-watermark" aria-hidden="true">
+          <img src="logo.png" alt="" class="hero-watermark-img">
+        </div>
+
+        <!-- 3D Floating Books (Pure CSS 3D, 60fps GPU, 0KB overhead) -->
+        <div class="hero-3d-floating-scene" aria-hidden="true">
+          <!-- Floating Book 1: Gold Scholastic Folio -->
+          <div class="hero-float-book hero-float-book-1">
+            <div class="hbook-3d-obj">
+              <div class="hbook-face hbook-front hbook-gold">
+                <div class="hbook-emboss">
+                  <span class="hbook-crest">✦</span>
+                  <span class="hbook-label">CBSE ACADEMICS</span>
+                  <div class="hbook-rule"></div>
+                </div>
+              </div>
+              <div class="hbook-face hbook-spine hbook-spine-gold">
+                <span>VIRAJ SCHOLASTIC • VOL. I</span>
+              </div>
+              <div class="hbook-face hbook-pages"></div>
+              <div class="hbook-face hbook-back hbook-gold"></div>
+            </div>
+            <div class="hbook-shadow"></div>
           </div>
-          <h1 class="hero-heading">Digital Knowledge & <span class="hero-gold-text">Library Hub</span></h1>
-          <p class="hero-motto">“Discover. Read. Learn. Participate. — 100% Free digital access for every student with Librarian permission.”</p>
-          
-          <div class="hero-buttons">
-            <button class="btn btn-gold btn-lg" onclick="go('secondary')">📚 Explore Library</button>
-            <button class="btn btn-green btn-lg" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">🎃 Goosebumps Series</button>
-            <button class="btn btn-ghost btn-lg" onclick="openRandomBook()" title="Pick a random book from the collection">🎲 Surprise Me!</button>
+
+          <!-- Floating Book 2: Navy Science Folio -->
+          <div class="hero-float-book hero-float-book-2">
+            <div class="hbook-3d-obj">
+              <div class="hbook-face hbook-front hbook-navy">
+                <div class="hbook-emboss">
+                  <span class="hbook-crest">🏛️</span>
+                  <span class="hbook-label">SCIENCE & DISCOVERY</span>
+                  <div class="hbook-rule"></div>
+                </div>
+              </div>
+              <div class="hbook-face hbook-spine hbook-spine-navy">
+                <span>SCIENCE ARCHIVE</span>
+              </div>
+              <div class="hbook-face hbook-pages"></div>
+              <div class="hbook-face hbook-back hbook-navy"></div>
+            </div>
+            <div class="hbook-shadow"></div>
+          </div>
+
+          <!-- Floating Book 3: Emerald Literature Primer -->
+          <div class="hero-float-book hero-float-book-3">
+            <div class="hbook-3d-obj">
+              <div class="hbook-face hbook-front hbook-emerald">
+                <div class="hbook-emboss">
+                  <span class="hbook-crest">📖</span>
+                  <span class="hbook-label">LITERARY CLASSICS</span>
+                  <div class="hbook-rule"></div>
+                </div>
+              </div>
+              <div class="hbook-face hbook-spine hbook-spine-emerald">
+                <span>LITERATURE & TALES</span>
+              </div>
+              <div class="hbook-face hbook-pages"></div>
+              <div class="hbook-face hbook-back hbook-emerald"></div>
+            </div>
+            <div class="hbook-shadow"></div>
+          </div>
+        </div>
+
+        <div class="hero-content">
+          <div class="hero-badge">
+            <span class="hero-live-dot" aria-hidden="true"></span>
+            <span>VIRAJ INTERNATIONAL SCHOOL • DIGITAL KNOWLEDGE HUB</span>
+          </div>
+
+          <h1 class="hero-heading">Viraj International School Digital Library Hub</h1>
+          <p class="hero-subheading">Discover, read, and excel with free access to thousands of books, academic guides, and literary adventures.</p>
+
+          <!-- Big Search Bar With Filters (wing, genre, author from existing data) -->
+          <div class="hero-search-card" role="search" aria-label="Library catalog search">
+            <div class="hero-search-main-row">
+              <div class="hero-search-input-wrap">
+                <i data-lucide="search" class="hero-search-icon" aria-hidden="true"></i>
+                <input
+                  type="search"
+                  id="heroSearchInput"
+                  class="hero-search-input"
+                  placeholder="Search books by title, author, series, or keyword..."
+                  autocomplete="off"
+                  aria-label="Search digital library"
+                  oninput="handleHeroSearch(this.value)"
+                  onkeydown="if(event.key==='Enter') executeHeroSearch()"
+                >
+                <button
+                  type="button"
+                  class="hero-search-clear-btn"
+                  id="heroSearchClearBtn"
+                  onclick="clearHeroSearch()"
+                  title="Clear search input"
+                  aria-label="Clear search input"
+                  hidden
+                >
+                  <i data-lucide="x" aria-hidden="true"></i>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                class="btn btn-gold hero-search-submit-btn"
+                onclick="executeHeroSearch()"
+                aria-label="Search library catalog"
+              >
+                <i data-lucide="search" aria-hidden="true"></i>
+                <span>Search Books</span>
+              </button>
+            </div>
+
+            <!-- Filters Row: wing, genre, author (using only fields that exist in our data) -->
+            <div class="hero-filters-row">
+              <div class="hero-filter-group">
+                <label for="heroFilterWing" class="hero-filter-label">
+                  <i data-lucide="book-open" aria-hidden="true"></i> Wing
+                </label>
+                <select id="heroFilterWing" class="hero-filter-select" onchange="handleHeroFilterChange()">
+                  <option value="All">All Wings</option>
+                  <option value="junior">Junior Wing (Pre-K - 5)</option>
+                  <option value="secondary">Secondary Wing (6 - 12)</option>
+                  <option value="biography">Biographies & Hall of Fame</option>
+                </select>
+              </div>
+
+              <div class="hero-filter-group">
+                <label for="heroFilterGenre" class="hero-filter-label">
+                  <i data-lucide="compass" aria-hidden="true"></i> Genre
+                </label>
+                <select id="heroFilterGenre" class="hero-filter-select" onchange="handleHeroFilterChange()">
+                  <option value="All">All Genres</option>
+                  ${distinctCategories.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+                </select>
+              </div>
+
+              <div class="hero-filter-group">
+                <label for="heroFilterAuthor" class="hero-filter-label">
+                  <i data-lucide="user" aria-hidden="true"></i> Author
+                </label>
+                <select id="heroFilterAuthor" class="hero-filter-select" onchange="handleHeroFilterChange()">
+                  <option value="All">All Authors</option>
+                  ${distinctAuthors.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')}
+                </select>
+              </div>
+
+              <button type="button" class="hero-filter-reset-btn" id="heroFilterResetBtn" onclick="resetHeroFilters()" title="Reset filters">
+                <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+                <span>Reset</span>
+              </button>
+            </div>
+
+            <!-- Live Search Results Dropdown -->
+            <div id="heroSearchResultsDropdown" class="hero-search-results-dropdown" hidden></div>
+          </div>
+
+          <!-- Two Buttons: Browse Books and Join the Hub -->
+          <div class="hero-actions-row">
+            <button class="btn btn-gold btn-lg hero-action-btn" onclick="go('secondary')">
+              <i data-lucide="library" aria-hidden="true"></i>
+              <span>Browse Books</span>
+            </button>
             ${!user ? `
-              <button class="btn btn-ghost btn-lg" onclick="go('auth', 'signup')">✨ Join Hub</button>
+              <button class="btn btn-outline btn-lg hero-action-btn" onclick="go('auth', 'signup')">
+                <i data-lucide="user-plus" aria-hidden="true"></i>
+                <span>Join the Hub</span>
+              </button>
             ` : `
-              <button class="btn btn-ghost btn-lg" onclick="go('profile')">👤 Reading Passport</button>
+              <button class="btn btn-outline btn-lg hero-action-btn" onclick="go('profile')">
+                <i data-lucide="award" aria-hidden="true"></i>
+                <span>Reading Passport</span>
+              </button>
             `}
           </div>
 
           <!-- Quick Trending Tags -->
           <div class="hero-trending-row">
-            <span style="font-weight:700;color:#fef08a;">🔥 Trending:</span>
-            <span class="trending-pill" onclick="appState.activeCategory='Goosebumps & Horror';go('secondary')">🎃 Goosebumps</span>
-            <span class="trending-pill" onclick="handleGlobalSearch('HorrorLand')">🎡 HorrorLand</span>
-            <span class="trending-pill" onclick="handleGlobalSearch('Sherlock')">🕵️ Sherlock Holmes</span>
-            <span class="trending-pill" onclick="handleGlobalSearch('Wings of Fire')">🚀 Wings of Fire</span>
-            <span class="trending-pill" onclick="appState.activeCategory='Comics';go('secondary')">🎨 Comics</span>
-            <span class="trending-pill" onclick="go('quiz')">🧠 Quiz Arena</span>
-          </div>
-        </div>
-
-        <div class="hero-right-badge">
-          <img src="logo.png" alt="Viraj School Emblem" class="hero-crest-lg">
-          <span style="font-size:0.85rem;font-weight:800;letter-spacing:1px;color:#ffffff;">ACADEMIC HUB</span>
-          <small style="font-size:0.7rem;color:#cbd5e1;margin-bottom:8px;">CBSE School • Kurgaon, Boisar</small>
-          
-          <div class="hero-stat-grid">
-            <div class="hero-mini-stat">
-              <strong>${allItems.length}+</strong>
-              <span>E-Books</span>
-            </div>
-            <div class="hero-mini-stat">
-              <strong>5</strong>
-              <span>Goosebumps</span>
-            </div>
-            <div class="hero-mini-stat">
-              <strong>100%</strong>
-              <span>Digital Text</span>
-            </div>
-            <div class="hero-mini-stat">
-              <strong>🔊 Free</strong>
-              <span>Read-Aloud</span>
-            </div>
+            <span class="hero-trending-label"><i data-lucide="flame" aria-hidden="true"></i> Trending:</span>
+            <button type="button" class="hero-trending-pill" onclick="applyHeroTag('Goosebumps', 'secondary')">Goosebumps</button>
+            <button type="button" class="hero-trending-pill" onclick="applyHeroTag('HorrorLand', 'secondary')">HorrorLand</button>
+            <button type="button" class="hero-trending-pill" onclick="applyHeroTag('Sherlock Holmes', 'secondary')">Sherlock Holmes</button>
+            <button type="button" class="hero-trending-pill" onclick="applyHeroTag('Wings of Fire', 'biography')">Wings of Fire</button>
+            <button type="button" class="hero-trending-pill" onclick="applyHeroTag('Comics', 'secondary')">Comics</button>
+            <button type="button" class="hero-trending-pill" onclick="go('quiz')">Quiz Arena</button>
           </div>
         </div>
       </section>
@@ -1395,21 +2849,66 @@ const views = {
       <!-- 1B. Daily Book Wisdom & Inspiration Widget -->
       ${renderDailyWisdomWidget()}
 
-      <!-- 2. Featured Digital Books -->
+      <!-- 2. FOUR CORE LIBRARY SHELVES WITH WOODEN SHELVES -->
+      <!-- Shelf 1: New Arrivals -->
       <section class="home-section">
         <div class="section-header-row">
-          <h3 class="section-title">🌟 Featured Digital Books</h3>
-          <span class="section-link" onclick="go('secondary')">View All Featured →</span>
+          <div class="section-title-wrap">
+            <span class="section-badge-icon"><i data-lucide="sparkles" aria-hidden="true"></i></span>
+            <h3 class="section-title">New Arrivals</h3>
+          </div>
+          <span class="section-link" onclick="go('secondary')">Browse All New Arrivals →</span>
         </div>
         <div class="books-shelf-grid">
-          ${(featuredBooks.length ? featuredBooks : allItems).slice(0, 4).map(renderBookCard).join('')}
+          ${newArrivals.map(renderBookCard).join('')}
         </div>
+        <div class="wooden-shelf" aria-hidden="true"></div>
       </section>
 
-      <!-- 3. Continue Reading Shelf (If available) -->
-      ${continueReadingShelf}
+      <!-- Shelf 2: Most Read This Month -->
+      <section class="home-section">
+        <div class="section-header-row">
+          <div class="section-title-wrap">
+            <span class="section-badge-icon"><i data-lucide="flame" aria-hidden="true"></i></span>
+            <h3 class="section-title">Most Read This Month</h3>
+          </div>
+          <span class="section-link" onclick="go('secondary')">Browse Popular →</span>
+        </div>
+        <div class="books-shelf-grid">
+          ${mostReadMonth.map(renderBookCard).join('')}
+        </div>
+        <div class="wooden-shelf" aria-hidden="true"></div>
+      </section>
 
-      <!-- 4. Explore Library Wings -->
+      <!-- Shelf 3: Recommended for Junior Wing -->
+      <section class="home-section">
+        <div class="section-header-row">
+          <div class="section-title-wrap">
+            <span class="section-badge-icon"><i data-lucide="smile" aria-hidden="true"></i></span>
+            <h3 class="section-title">Recommended for Junior Wing</h3>
+          </div>
+          <span class="section-link" onclick="go('junior')">Open Junior Wing →</span>
+        </div>
+        <div class="books-shelf-grid">
+          ${recommendedJunior.map(renderBookCard).join('')}
+        </div>
+        <div class="wooden-shelf" aria-hidden="true"></div>
+      </section>
+
+      <!-- Shelf 4: Continue Reading -->
+      <section class="home-section">
+        <div class="section-header-row">
+          <div class="section-title-wrap">
+            <span class="section-badge-icon"><i data-lucide="bookmark" aria-hidden="true"></i></span>
+            <h3 class="section-title">Continue Reading</h3>
+          </div>
+          <span class="section-link" onclick="go('profile')">View Reading Passport →</span>
+        </div>
+        ${continueReadingContent}
+        <div class="wooden-shelf" aria-hidden="true"></div>
+      </section>
+
+      <!-- 3. Explore Library Wings -->
       <section class="home-section">
         <div class="section-header-row">
           <h3 class="section-title">🏛️ Explore Library</h3>
@@ -1465,7 +2964,7 @@ const views = {
         </div>
       </section>
 
-      <!-- 4B. Special Collection: R.L. Stine's Goosebumps Series -->
+      <!-- 4. Special Collection: R.L. Stine's Goosebumps Series -->
       ${goosebumpsBooks.length ? `
       <section class="home-section goosebumps-banner-section">
         <div class="goosebumps-banner-card">
@@ -1501,28 +3000,6 @@ const views = {
           ${goosebumpsBooks.map(renderBookCard).join('')}
         </div>
       </section>` : ''}
-
-      <!-- 5. Popular This Week -->
-      <section class="home-section">
-        <div class="section-header-row">
-          <h3 class="section-title">🔥 Popular This Week</h3>
-          <span class="section-link" onclick="go('secondary')">Browse Popular →</span>
-        </div>
-        <div class="books-shelf-grid">
-          ${(popularBooks.length ? popularBooks : allItems.slice(2, 6)).slice(0, 4).map(renderBookCard).join('')}
-        </div>
-      </section>
-
-      <!-- 6. Recently Added -->
-      <section class="home-section">
-        <div class="section-header-row">
-          <h3 class="section-title">✨ Recently Added</h3>
-          <span class="section-link" onclick="go('secondary')">Browse All Recent →</span>
-        </div>
-        <div class="books-shelf-grid">
-          ${recentBooks.map(renderBookCard).join('')}
-        </div>
-      </section>
 
       <!-- 7. Test Your Wits (Challenge Section) -->
       <section class="home-section">
@@ -1752,160 +3229,24 @@ const views = {
       </section>`;
   },
 
-  // 2. JUNIOR LIBRARY VIEW
+  // 2. JUNIOR LIBRARY VIEW (CATALOG BROWSING)
   async junior() {
-    const activeCat = appState.activeCategory || 'All';
-    const activeGrade = appState.activeGrade || 'All';
-
-    let url = 'items?section=junior';
-    if (activeCat !== 'All') url += `&category=${encodeURIComponent(activeCat)}`;
-    if (activeGrade !== 'All') url += `&grade=${encodeURIComponent(activeGrade)}`;
-
-    const items = await api(url);
-    cachedItems = items;
-
-    return `
-      <div style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">🧸 Junior Library</h2>
-          <p style="color:var(--text-muted);font-size:0.9rem;">Nursery rhymes, short stories, audio and flip books for primary learners.</p>
-        </div>
-        ${isLibrarian() ? `
-          <button class="btn btn-gold" onclick="go('admin')" style="display:inline-flex;align-items:center;gap:6px;">
-            ➕ Add Books to Catalog
-          </button>
-        ` : ''}
-      </div>
-
-      <!-- Catalog Toolbar -->
-      <div class="catalog-toolbar">
-        <div class="toolbar-search-row">
-          <input type="text" id="shelfSearchInput" class="filter-input" placeholder="Search junior titles or authors..." oninput="filterLocalShelf(this.value)">
-          <select id="gradeFilterSelect" class="filter-select" onchange="appState.activeGrade=this.value;go('junior')">
-            <option value="All" ${activeGrade === 'All' ? 'selected' : ''}>All Age Groups / Grades</option>
-            <option value="Pre-K" ${activeGrade === 'Pre-K' ? 'selected' : ''}>Pre-K - Kindergarten</option>
-            <option value="Grade 1" ${activeGrade === 'Grade 1' ? 'selected' : ''}>Grade 1 - 2</option>
-            <option value="Grade 3" ${activeGrade === 'Grade 3' ? 'selected' : ''}>Grade 3 - 5</option>
-          </select>
-        </div>
-
-        <div class="catalog-category-tabs">
-          ${JUNIOR_CATS.map(c => `
-            <button class="cat-tab-btn ${c === activeCat ? 'active' : ''}" onclick="appState.activeCategory='${c}';go('junior')">
-              ${c}
-            </button>`).join('')}
-        </div>
-      </div>
-
-      <!-- Shelf Items Grid (4-Column Aligned) -->
-      <div id="shelfCardsContainer" class="books-shelf-grid">
-        ${items.length ? items.map(renderBookCard).join('') : `
-          <div style="grid-column:1/-1;text-align:center;padding:48px 20px;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);">
-            <div style="font-size:3rem;margin-bottom:8px;">📚</div>
-            <h4>No junior books found</h4>
-            <p style="color:var(--text-muted);font-size:0.88rem;">Try clearing your search or selecting "All" categories.</p>
-          </div>`}
-      </div>`;
+    return await renderCatalogPage('junior');
   },
 
-  // 3. SECONDARY LIBRARY VIEW
+  // 3. SECONDARY LIBRARY VIEW (CATALOG BROWSING)
   async secondary() {
-    const activeCat = appState.activeCategory || 'All';
-    const activeGrade = appState.activeGrade || 'All';
-
-    let url = 'items?section=secondary';
-    if (activeCat !== 'All') url += `&category=${encodeURIComponent(activeCat)}`;
-    if (activeGrade !== 'All') url += `&grade=${encodeURIComponent(activeGrade)}`;
-
-    const items = await api(url);
-    cachedItems = items;
-
-    return `
-      <div style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">📚 Secondary Library</h2>
-          <p style="color:var(--text-muted);font-size:0.9rem;">Academics, comics, novels, encyclopedias and audiobooks for middle and senior students.</p>
-        </div>
-        ${isLibrarian() ? `
-          <button class="btn btn-gold" onclick="go('admin')" style="display:inline-flex;align-items:center;gap:6px;">
-            ➕ Add Books to Catalog
-          </button>
-        ` : ''}
-      </div>
-
-      <!-- Catalog Toolbar -->
-      <div class="catalog-toolbar">
-        <div class="toolbar-search-row">
-          <input type="text" id="shelfSearchInput" class="filter-input" placeholder="Search by title, author, or subject..." oninput="filterLocalShelf(this.value)">
-          <select id="gradeFilterSelect" class="filter-select" onchange="appState.activeGrade=this.value;go('secondary')">
-            <option value="All" ${activeGrade === 'All' ? 'selected' : ''}>All Secondary Grades</option>
-            <option value="Grade 6" ${activeGrade === 'Grade 6' ? 'selected' : ''}>Grades 6 - 8 (Middle School)</option>
-            <option value="Grade 9" ${activeGrade === 'Grade 9' ? 'selected' : ''}>Grades 9 - 10 (Secondary)</option>
-            <option value="Grade 11" ${activeGrade === 'Grade 11' ? 'selected' : ''}>Grades 11 - 12 (Senior Secondary)</option>
-          </select>
-        </div>
-
-        <div class="catalog-category-tabs">
-          ${SECONDARY_CATS.map(c => `
-            <button class="cat-tab-btn ${c === activeCat ? 'active' : ''}" onclick="appState.activeCategory='${c}';go('secondary')">
-              ${c}
-            </button>`).join('')}
-        </div>
-      </div>
-
-      <!-- Shelf Items Grid (4-Column Aligned) -->
-      <div id="shelfCardsContainer" class="books-shelf-grid">
-        ${items.length ? items.map(renderBookCard).join('') : `
-          <div style="grid-column:1/-1;text-align:center;padding:48px 20px;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);">
-            <div style="font-size:3rem;margin-bottom:8px;">📚</div>
-            <h4>No secondary books found</h4>
-            <p style="color:var(--text-muted);font-size:0.88rem;">Try selecting "All" categories or changing your search terms.</p>
-          </div>`}
-      </div>`;
+    return await renderCatalogPage('secondary');
   },
 
-  // 4. BIOGRAPHIES VIEW
+  // 4. BIOGRAPHIES VIEW (CATALOG BROWSING)
   async biography() {
-    const activeCat = appState.activeCategory || 'All';
-    let url = 'items?section=biography';
-    if (activeCat !== 'All') url += `&category=${encodeURIComponent(activeCat)}`;
+    return await renderCatalogPage('biography');
+  },
 
-    const items = await api(url);
-    cachedItems = items;
-
-    return `
-      <div style="margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">👑 Biographies & Great Minds</h2>
-          <p style="color:var(--text-muted);font-size:0.9rem;">Inspiring life stories of scientists, leaders, writers, inventors and great thinkers.</p>
-        </div>
-        ${isLibrarian() ? `
-          <button class="btn btn-gold" onclick="go('admin')" style="display:inline-flex;align-items:center;gap:6px;">
-            ➕ Add Books to Catalog
-          </button>
-        ` : ''}
-      </div>
-
-      <div class="catalog-toolbar">
-        <div class="toolbar-search-row">
-          <input type="text" id="shelfSearchInput" class="filter-input" placeholder="Search personality or field..." oninput="filterLocalShelf(this.value)">
-        </div>
-        <div class="catalog-category-tabs">
-          ${BIO_CATS.map(c => `
-            <button class="cat-tab-btn ${c === activeCat ? 'active' : ''}" onclick="appState.activeCategory='${c}';go('biography')">
-              ${c}
-            </button>`).join('')}
-        </div>
-      </div>
-
-      <div id="shelfCardsContainer" class="books-shelf-grid">
-        ${items.length ? items.map(renderBookCard).join('') : `
-          <div style="grid-column:1/-1;text-align:center;padding:48px 20px;background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);">
-            <div style="font-size:3rem;margin-bottom:8px;">👑</div>
-            <h4>No biographies found</h4>
-            <p style="color:var(--text-muted);font-size:0.88rem;">Select "All" to browse all biographical profiles.</p>
-          </div>`}
-      </div>`;
+  // 4B. COMPLETE REPOSITORY BROWSE
+  async books() {
+    return await renderCatalogPage('all');
   },
 
   // 5. TEST YOUR WITS (QUIZ ARENA)
@@ -1913,7 +3254,7 @@ const views = {
     if (!sub) {
       return `
         <div style="margin-bottom:28px;">
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">🧠 Test Your Wits</h2>
+          <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">🧠 Test Your Wits</h1>
           <p style="color:var(--text-muted);font-size:0.9rem;">Select your trivia category to challenge your academic knowledge, earn points, and unlock achievements.</p>
         </div>
 
@@ -2078,7 +3419,7 @@ const views = {
     return `
       <div style="max-width:760px;margin:0 auto;">
         <div style="margin-bottom:24px;">
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">💡 Suggest a Book</h2>
+          <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">💡 Suggest a Book</h1>
           <p style="color:var(--text-muted);font-size:0.9rem;">Recommend books, authors, or educational resources for the Viraj International School library.</p>
         </div>
 
@@ -2138,7 +3479,7 @@ const views = {
     return `
       <div>
         <div style="margin-bottom:24px;">
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">🗳️ Vote for the Next Book</h2>
+          <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">🗳️ Vote for the Next Book</h1>
           <p style="color:var(--text-muted);font-size:0.9rem;">Cast your vote on candidate book titles currently under consideration for the school library.</p>
         </div>
 
@@ -2196,7 +3537,7 @@ const views = {
     return `
       <div>
         <div style="margin-bottom:24px;">
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">🏆 Avid Reader of the Month</h2>
+          <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">🏆 Avid Reader of the Month</h1>
           <p style="color:var(--text-muted);font-size:0.9rem;">Celebrating dedication, consistent reading habits, and inspiring book reflections.</p>
         </div>
 
@@ -2266,7 +3607,7 @@ const views = {
     return `
       <div>
         <div style="margin-bottom:24px;">
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">📰 Daily Newspapers & Campus News</h2>
+          <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">📰 Daily Newspapers & Campus News</h1>
           <p style="color:var(--text-muted);font-size:0.9rem;">Access daily leading student newspapers, national editorial columns, and official campus circulars.</p>
         </div>
 
@@ -2383,9 +3724,36 @@ const views = {
     const totalReads = (u.usage || []).reduce((a, x) => a + x.n, 0);
 
     let rank = 'Bronze Scholar 🥉';
-    if (totalReads >= 30) rank = 'Grand Bibliophile 💎';
-    else if (totalReads >= 15) rank = 'Master Scholar 🥇';
-    else if (totalReads >= 5) rank = 'Book Explorer 🥈';
+    let nextRankName = 'Book Explorer 🥈';
+    let progressPct = Math.min(100, Math.round((totalReads / 5) * 100));
+    let progressLabel = `${totalReads} of 5 reads towards Book Explorer 🥈`;
+
+    if (totalReads >= 30) {
+      rank = 'Grand Bibliophile 💎';
+      nextRankName = 'Grand Bibliophile 💎 (Max Tier)';
+      progressPct = 100;
+      progressLabel = `Maximum Scholar Rank Achieved! (${totalReads} total reads)`;
+    } else if (totalReads >= 15) {
+      rank = 'Master Scholar 🥇';
+      nextRankName = 'Grand Bibliophile 💎';
+      progressPct = Math.min(100, Math.round(((totalReads - 15) / 15) * 100));
+      progressLabel = `${totalReads - 15} of 15 more reads to reach Grand Bibliophile 💎`;
+    } else if (totalReads >= 5) {
+      rank = 'Book Explorer 🥈';
+      nextRankName = 'Master Scholar 🥇';
+      progressPct = Math.min(100, Math.round(((totalReads - 5) / 10) * 100));
+      progressLabel = `${totalReads - 5} of 10 more reads to reach Master Scholar 🥇`;
+    }
+
+    // Reading Passport Badges Registry
+    const badges = [
+      { id: 'first_read', title: 'First Steps', emoji: '📖', desc: 'Read your first book in the hub', earned: totalReads >= 1, req: 'Read 1 book' },
+      { id: 'explorer', title: 'Book Explorer', emoji: '🥈', desc: 'Read 5 books across any wing', earned: totalReads >= 5, req: 'Read 5 books' },
+      { id: 'scholar', title: 'Master Scholar', emoji: '🥇', desc: 'Read 15 books across any wing', earned: totalReads >= 15, req: 'Read 15 books' },
+      { id: 'bibliophile', title: 'Grand Bibliophile', emoji: '💎', desc: 'Complete 30 books & stories', earned: totalReads >= 30, req: 'Read 30 books' },
+      { id: 'quiz_ace', title: 'Quiz Arena Ace', emoji: '🧠', desc: 'Complete at least 1 reading quiz', earned: (counts.quiz || 0) >= 1, req: 'Complete 1 quiz' },
+      { id: 'curator', title: 'Passport Curator', emoji: '🔖', desc: 'Save a book to your personal shelf', earned: (u.bookmarks || []).length >= 1, req: 'Save 1 book' }
+    ];
 
     return `
       <div>
@@ -2393,7 +3761,7 @@ const views = {
           <div class="passport-user-header">
             <div class="passport-avatar-lg">${(u.name || 'S')[0].toUpperCase()}</div>
             <div>
-              <h2 style="font-size:1.6rem;margin-bottom:4px;">${esc(u.name)}</h2>
+              <h1 class="view-title" style="font-size:1.6rem;margin-bottom:4px;">${esc(u.name)} — Reading Passport</h1>
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <span style="color:var(--text-muted);font-size:0.85rem;">@${esc(u.username)}</span>
                 <span class="pillar-badge" style="background:var(--bg-secondary);color:var(--navy-primary);">${esc(u.grade || 'Student')}</span>
@@ -2424,6 +3792,54 @@ const views = {
               <div class="metric-pill-val" style="color:var(--gold-primary);">${totalReads}</div>
               <div class="metric-pill-lbl">Total Interactions</div>
             </div>
+          </div>
+        </div>
+
+        <!-- Animated Reading Passport Progress & Tier Goals -->
+        <div class="passport-tier-progress-card">
+          <div class="passport-tier-header">
+            <div class="passport-tier-title">
+              <i data-lucide="award" aria-hidden="true"></i>
+              <span>Next Scholar Rank: <strong>${nextRankName}</strong></span>
+            </div>
+            <span class="passport-tier-pct">${progressPct}%</span>
+          </div>
+          <div class="passport-progress-track">
+            <div class="passport-progress-fill" style="width: ${progressPct}%" role="progressbar" aria-valuenow="${progressPct}" aria-valuemin="0" aria-valuemax="100"></div>
+          </div>
+          <div class="passport-progress-caption">${progressLabel}</div>
+        </div>
+
+        <!-- Reading Passport Badges Shelf with Celebratory Confetti -->
+        <div class="admin-panel-card passport-badges-card" style="margin-bottom:24px;">
+          <div class="section-header-row">
+            <div>
+              <h4 class="section-title" style="font-size:1.2rem;">🏅 Scholar Achievement Badges</h4>
+              <p style="color:var(--text-muted);font-size:0.85rem;margin-top:2px;">Unlock verified digital reading milestones as you advance through the school catalog.</p>
+            </div>
+            <span class="pillar-badge" style="background:var(--gold-soft);color:var(--gold-primary);font-weight:700;">
+              ${badges.filter(b => b.earned).length} of ${badges.length} Badges Earned
+            </span>
+          </div>
+
+          <div class="passport-badges-grid">
+            ${badges.map(b => `
+              <div class="passport-badge-item ${b.earned ? 'is-earned' : 'is-locked'}" 
+                role="button" 
+                tabindex="0"
+                onclick="handlePassportBadgeClick(event, '${esc(b.title)}', ${b.earned}, '${esc(b.req)}')"
+                title="${b.earned ? 'Click to celebrate!' : b.req}">
+                <div class="pbadge-icon-wrap">
+                  <span class="pbadge-emoji">${b.emoji}</span>
+                  ${b.earned ? '<span class="pbadge-star-check">✓</span>' : '<span class="pbadge-lock-icon">🔒</span>'}
+                </div>
+                <div class="pbadge-info">
+                  <div class="pbadge-title">${esc(b.title)}</div>
+                  <div class="pbadge-desc">${esc(b.desc)}</div>
+                  <div class="pbadge-status-pill">${b.earned ? 'Earned ⭐' : b.req}</div>
+                </div>
+              </div>
+            `).join('')}
           </div>
         </div>
 
@@ -2520,7 +3936,7 @@ const views = {
     return `
       <div>
         <div style="margin-bottom:24px;">
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">🔖 Saved Books</h2>
+          <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">🔖 Saved Books</h1>
           <p style="color:var(--text-muted);font-size:0.9rem;">Your personal reading collection for quick access.</p>
         </div>
 
@@ -2544,7 +3960,7 @@ const views = {
     return `
       <div style="max-width:800px;margin:0 auto;">
         <div style="margin-bottom:24px;">
-          <h2 style="font-size:1.8rem;margin-bottom:4px;">🕒 Reading History</h2>
+          <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">🕒 Reading History</h1>
           <p style="color:var(--text-muted);font-size:0.9rem;">Complete chronological log of your digital book reads, audio plays, and quiz attempts.</p>
         </div>
 
@@ -2814,6 +4230,153 @@ const views = {
             </div>
           </div>
         </div>
+
+        <!-- Librarian Desk & Curatorial Staff Contact (Task 5 Marked Placeholder) -->
+        <div class="about-detail-card" style="margin-top:24px;">
+          <div class="about-card-title">
+            <span>👩‍🏫</span>
+            <span>Campus Librarian Desk & Curatorial Staff</span>
+          </div>
+          <div class="librarian-desk-card" style="display:flex;gap:18px;align-items:center;background:var(--bg-body);padding:20px;border-radius:var(--radius-md);border:1px solid var(--border-color);flex-wrap:wrap;">
+            <div style="width:58px;height:58px;border-radius:50%;background:var(--gold-soft);color:var(--gold-primary);display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:700;flex-shrink:0;">
+              📖
+            </div>
+            <div style="flex:1;min-width:240px;">
+              <h4 style="font-size:1.1rem;color:var(--text-main);margin-bottom:4px;">
+                [Librarian Desk: Mrs. / Mr. Academic Librarian Placeholder]
+              </h4>
+              <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:8px;">
+                Head Librarian • Department of Knowledge & Information Resources, Viraj International School
+              </p>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.84rem;color:var(--text-secondary);">
+                <span><strong>Email:</strong> <a href="mailto:library@virajinternationalschool.com" class="footer-ext-link">library@virajinternationalschool.com</a></span>
+                <span><strong>Desk Phone:</strong> <a href="tel:08554998833" class="footer-ext-link">085549 98833 (Ext: 104)</a></span>
+                <span><strong>Office:</strong> Ground Floor Academic Wing, Room L-102</span>
+              </div>
+            </div>
+            <div>
+              <button class="btn btn-sm btn-gold" onclick="go('suggest')">
+                <i data-lucide="lightbulb" aria-hidden="true"></i> <span>Send Book Request</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  },
+
+  // 13B. PRIVACY POLICY
+  privacy() {
+    return `
+      <div class="policy-page-wrap" style="max-width:880px;margin:0 auto;padding:24px 16px 60px;">
+        <div class="policy-header" style="margin-bottom:32px;border-bottom:1.5px solid var(--border-color);padding-bottom:20px;">
+          <div class="policy-badge" style="display:inline-flex;align-items:center;gap:6px;font-size:0.8rem;font-weight:700;color:var(--gold-primary);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+            <i data-lucide="shield-check" aria-hidden="true"></i> Student Privacy & Trust
+          </div>
+          <h1 class="view-title" style="font-size:clamp(1.8rem, 3vw, 2.4rem);margin-bottom:8px;color:var(--text-main);">Digital Library Privacy Policy</h1>
+          <p style="color:var(--text-muted);font-size:0.95rem;">Viraj International School • CBSE Kurgaon, Boisar • Effective Academic Year 2025–2026</p>
+        </div>
+
+        <div class="policy-content" style="display:flex;flex-direction:column;gap:24px;line-height:1.7;color:var(--text-secondary);font-size:0.95rem;">
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">1. Scholastic Data Protection Commitment</h2>
+            <p>Viraj International School is dedicated to providing a safe, advertisement-free, and privacy-first digital learning environment for all enrolled students, teachers, and parents. We do not sell, rent, or monetize student reading data, profile identifiers, or quiz history.</p>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">2. Information We Collect</h2>
+            <p>Our digital repository collects only minimal academic information necessary for library functions:</p>
+            <ul style="margin-left:20px;margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+              <li><strong>Student Scholar Profiles:</strong> Name, class grade level, and chosen username for digital library card identification.</li>
+              <li><strong>Reading Activity & Passports:</strong> Books read, chapters completed, bookmarks saved, and reading sprint minutes for earning academic merit badges.</li>
+              <li><strong>Focus & Preference Data:</strong> Ambient study sound levels, font size adjustments, and color theme preferences stored locally on your device via browser LocalStorage.</li>
+            </ul>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">3. Cookies & Local Storage</h2>
+            <p>This library platform uses zero third-party tracking or advertising cookies. Browser local storage is employed strictly for your convenience to remember your reading progress across sessions and maintain offline functionality.</p>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">4. Parental & Guardian Rights</h2>
+            <p>Parents and legal guardians may review their student's reading records, borrow history, or request profile removal at any time by contacting the Campus Library Desk.</p>
+            <div style="margin-top:14px;">
+              <button class="btn btn-gold btn-sm" onclick="go('about')">Contact Library Desk</button>
+            </div>
+          </section>
+        </div>
+      </div>`;
+  },
+
+  // 13C. TERMS OF USE
+  terms() {
+    return `
+      <div class="policy-page-wrap" style="max-width:880px;margin:0 auto;padding:24px 16px 60px;">
+        <div class="policy-header" style="margin-bottom:32px;border-bottom:1.5px solid var(--border-color);padding-bottom:20px;">
+          <div class="policy-badge" style="display:inline-flex;align-items:center;gap:6px;font-size:0.8rem;font-weight:700;color:var(--gold-primary);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+            <i data-lucide="file-text" aria-hidden="true"></i> Academic Charter
+          </div>
+          <h1 class="view-title" style="font-size:clamp(1.8rem, 3vw, 2.4rem);margin-bottom:8px;color:var(--text-main);">Digital Library Terms of Use</h1>
+          <p style="color:var(--text-muted);font-size:0.95rem;">Viraj International School • CBSE Kurgaon, Boisar • Student Digital Agreement</p>
+        </div>
+
+        <div class="policy-content" style="display:flex;flex-direction:column;gap:24px;line-height:1.7;color:var(--text-secondary);font-size:0.95rem;">
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">1. Free Educational Access</h2>
+            <p>All literature, reference guides, audio materials, and daily student press editions provided on the Viraj Digital Knowledge Hub are provided 100% free of charge to enrolled scholars for educational and personal enrichment.</p>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">2. Digital Book Loans (14-Day Lending)</h2>
+            <p>Students may check out books to their personal reading shelf under our official 14-day school loan system. Books automatically renew or may be returned anytime with one click to keep slots available for other scholars.</p>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">3. Scholar Code of Conduct</h2>
+            <p>Scholars are expected to uphold Viraj International School's values of integrity and excellence:</p>
+            <ul style="margin-left:20px;margin-top:8px;display:flex;flex-direction:column;gap:6px;">
+              <li>Use constructive and thoughtful language when submitting book suggestions.</li>
+              <li>Respect fellow scholars during democratic voting elections for upcoming titles.</li>
+              <li>Refrain from attempting to bypass site integrity or digital reader safeguards.</li>
+            </ul>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">4. Multi-Device Compatibility</h2>
+            <p>Scholars may access this hub from desktop laptops, school computer labs, or personal tablets. Offline reading support is enabled through our Progressive Web App (PWA) service worker.</p>
+          </section>
+        </div>
+      </div>`;
+  },
+
+  // 13D. ACADEMIC ETHICS
+  ethics() {
+    return `
+      <div class="policy-page-wrap" style="max-width:880px;margin:0 auto;padding:24px 16px 60px;">
+        <div class="policy-header" style="margin-bottom:32px;border-bottom:1.5px solid var(--border-color);padding-bottom:20px;">
+          <div class="policy-badge" style="display:inline-flex;align-items:center;gap:6px;font-size:0.8rem;font-weight:700;color:var(--gold-primary);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+            <i data-lucide="award" aria-hidden="true"></i> Scholastic Integrity
+          </div>
+          <h1 class="view-title" style="font-size:clamp(1.8rem, 3vw, 2.4rem);margin-bottom:8px;color:var(--text-main);">Academic Ethics & Copyright Guidelines</h1>
+          <p style="color:var(--text-muted);font-size:0.95rem;">Viraj International School • CBSE Academic Integrity & Anti-Plagiarism Charter</p>
+        </div>
+
+        <div class="policy-content" style="display:flex;flex-direction:column;gap:24px;line-height:1.7;color:var(--text-secondary);font-size:0.95rem;">
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">1. Educational Fair Use & Copyright Compliance</h2>
+            <p>Materials hosted in the Viraj Digital Library Hub are curated strictly for non-profit educational instruction under Indian Copyright Act Section 52 (Fair Dealing for Educational Purposes) and CBSE instructional guidelines. Commercial duplication or re-distribution is strictly prohibited.</p>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">2. Anti-Plagiarism & Citation Etiquette</h2>
+            <p>Scholars conducting science research, biography presentations, or literary essays are required to cite their sources accurately. Quotes and reference ideas derived from digital library volumes should always reference the book title, author, and edition.</p>
+          </section>
+
+          <section class="policy-card" style="background:var(--bg-surface);border:1px solid var(--border-color);border-radius:var(--radius-lg);padding:24px;">
+            <h2 style="font-size:1.25rem;color:var(--navy-primary);margin-bottom:10px;">3. Responsible Digital Citizenship</h2>
+            <p>Every student scholar represents Viraj International School. Digital literacy encompasses honesty, respectful communication, academic fairness in Quiz Arena competitions, and safeguarding personal login credentials.</p>
+          </section>
+        </div>
       </div>`;
   },
 
@@ -3000,7 +4563,7 @@ const views = {
       <div class="admin-hub-container">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
           <div>
-            <h2 style="font-size:1.8rem;margin-bottom:4px;">🛡️ Librarian Dashboard</h2>
+            <h1 class="view-title" style="font-size:1.8rem;margin-bottom:4px;">🛡️ Librarian Dashboard</h1>
             <p style="color:var(--text-muted);font-size:0.9rem;">Manage library resources, user verification, quiz questions, and announcements.</p>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -3650,6 +5213,10 @@ async function submitQuickSuggestion() {
 }
 
 function filterLocalShelf(query) {
+  if ($('#catalogCardsContainer')) {
+    handleCatalogSearch(query);
+    return;
+  }
   const q = (query || '').toLowerCase().trim();
   const filtered = cachedItems.filter(i => {
     return !q ||
@@ -3719,8 +5286,28 @@ function submitQuizAnswer(idx) {
     explanation: curr.explanation || ''
   });
 
+  // Micro-interaction: green pulse for correct, gentle shake for wrong
+  const buttons = document.querySelectorAll('.quiz-opt-btn');
+  const clickedBtn = buttons[idx];
+  const correctBtn = buttons[curr.ans];
+
+  if (clickedBtn) {
+    if (isCorrect) {
+      clickedBtn.classList.add('opt-correct');
+      const rect = clickedBtn.getBoundingClientRect();
+      launchConfettiBurst(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    } else {
+      clickedBtn.classList.add('opt-wrong');
+      if (correctBtn) correctBtn.classList.add('opt-correct');
+    }
+  }
+
   showToast(isCorrect ? 'Correct! Well done! ⭐' : 'Not quite. Check the explanation! 💡', isCorrect ? 'success' : 'error');
-  go('quiz', qState.category);
+
+  // Allow tactile micro-interaction (420ms) to complete before advancing state
+  setTimeout(() => {
+    go('quiz', qState.category);
+  }, 420);
 }
 
 async function advanceQuizQuestion() {
@@ -3812,6 +5399,177 @@ function switchLoginRole(role) {
   }
 }
 
+// =========================================================
+// 🚀 MOTION ENGINE: PAGE STAGGER, PARALLAX & CONFETTI
+// =========================================================
+
+// Page load: fade and slide-up with 60-80ms (70ms) stagger
+function applyPageStaggerEntrance() {
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) return;
+
+  const targets = Array.from(document.querySelectorAll(
+    '#app > * > section, #app > * > .catalog-main-layout, #app > * > .admin-panel-card, #app > * > .passport-banner, #app .shelf-section, #app .hero-search-card, #app .passport-tier-progress-card'
+  )).slice(0, 10);
+
+  if (!targets.length) return;
+
+  if (window.gsap && typeof gsap.fromTo === 'function') {
+    gsap.fromTo(targets, 
+      { opacity: 0, y: 16 },
+      { 
+        opacity: 1, 
+        y: 0, 
+        duration: 0.36, 
+        stagger: 0.07, // 70ms within 60-80ms specification
+        ease: 'power2.out',
+        clearProps: 'transform,opacity'
+      }
+    );
+  } else {
+    // Pure CSS fallback
+    targets.forEach((el, idx) => {
+      el.style.opacity = '0';
+      el.style.transform = 'translateY(16px)';
+      el.style.transition = 'opacity 0.35s ease-out, transform 0.35s ease-out';
+      setTimeout(() => {
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0)';
+      }, idx * 70);
+    });
+  }
+}
+
+// Very subtle parallax on bookshelf rows (throttled with requestAnimationFrame)
+let parallaxActive = false;
+function initShelfParallax() {
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) return;
+  if (parallaxActive) return;
+  parallaxActive = true;
+
+  let ticking = false;
+  window.addEventListener('scroll', () => {
+    if (!ticking) {
+      window.requestAnimationFrame(() => {
+        const shelves = document.querySelectorAll('.wooden-shelf');
+        if (!shelves.length) {
+          ticking = false;
+          return;
+        }
+        const vh = window.innerHeight || 800;
+        shelves.forEach(shelf => {
+          const rect = shelf.getBoundingClientRect();
+          if (rect.top < vh + 100 && rect.bottom > -100) {
+            const centerOffset = (rect.top + rect.height / 2) - (vh / 2);
+            // Subtle shift clamped to ±5px
+            const offset = Math.max(-5, Math.min(5, -centerOffset * 0.015));
+            shelf.style.transform = `translateY(${offset.toFixed(1)}px)`;
+          }
+        });
+        ticking = false;
+      });
+      ticking = true;
+    }
+  }, { passive: true });
+}
+
+// Short celebratory canvas confetti burst (zero external dependencies)
+function launchConfettiBurst(originX, originY) {
+  const prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (prefersReduced) return;
+
+  const canvas = document.createElement('canvas');
+  canvas.className = 'confetti-burst-canvas';
+  canvas.style.position = 'fixed';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  canvas.style.width = '100vw';
+  canvas.style.height = '100vh';
+  canvas.style.pointerEvents = 'none';
+  canvas.style.zIndex = '99999';
+  document.body.appendChild(canvas);
+
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  ctx.scale(dpr, dpr);
+
+  const startX = (originX && originX > 0) ? originX : window.innerWidth / 2;
+  const startY = (originY && originY > 0) ? originY : window.innerHeight / 2;
+
+  // School scholastic theme colors (Gold, Navy, Crimson, Emerald, Amber)
+  const colors = ['#D4AF37', '#1E3A8A', '#DC2626', '#16A34A', '#F59E0B', '#3B82F6', '#8B5CF6'];
+  const particleCount = 42;
+  const particles = [];
+
+  for (let i = 0; i < particleCount; i++) {
+    const angle = (Math.PI * 2 * i) / particleCount + (Math.random() - 0.5) * 0.5;
+    const speed = 4 + Math.random() * 7;
+    particles.push({
+      x: startX,
+      y: startY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 3.5, // Initial upward burst
+      color: colors[Math.floor(Math.random() * colors.length)],
+      size: 5 + Math.random() * 5,
+      rotation: Math.random() * 360,
+      rotSpeed: (Math.random() - 0.5) * 12,
+      opacity: 1,
+      gravity: 0.22,
+      drag: 0.96
+    });
+  }
+
+  const startTime = performance.now();
+  const duration = 1200; // 1.2s short celebration
+
+  function frame(currentTime) {
+    const elapsed = currentTime - startTime;
+    if (elapsed > duration) {
+      if (canvas.parentNode) canvas.remove();
+      return;
+    }
+
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    particles.forEach(p => {
+      p.vx *= p.drag;
+      p.vy = (p.vy + p.gravity) * p.drag;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rotation += p.rotSpeed;
+      p.opacity = Math.max(0, 1 - (elapsed / duration));
+
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate((p.rotation * Math.PI) / 180);
+      ctx.globalAlpha = p.opacity;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      ctx.restore();
+    });
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+// Reading Passport Badge Interaction Handler
+function handlePassportBadgeClick(event, title, earned, req) {
+  if (event) event.stopPropagation();
+  if (earned) {
+    const x = event ? event.clientX : window.innerWidth / 2;
+    const y = event ? event.clientY : window.innerHeight / 2;
+    launchConfettiBurst(x, y);
+    showToast(`Badge Unlocked: ${title}! ⭐ Verified on Passport.`, 'success');
+  } else {
+    showToast(`Locked Milestone: ${req}`, 'info');
+  }
+}
+
 // Global Window Function Hooks
 window.go = go;
 window.openItem = openItem;
@@ -3838,6 +5596,30 @@ window.adminApproveUser = adminApproveUser;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.switchLoginRole = switchLoginRole;
 window.logout = logout;
+
+// Task 3 Book Browsing & Catalog Hooks
+window.handleCatalogSearch = handleCatalogSearch;
+window.clearCatalogSearch = clearCatalogSearch;
+window.setCatalogSort = setCatalogSort;
+window.setCatalogWing = setCatalogWing;
+window.setCatalogCategory = setCatalogCategory;
+window.setCatalogGrade = setCatalogGrade;
+window.setCatalogAvailability = setCatalogAvailability;
+window.resetCatalogFilters = resetCatalogFilters;
+window.loadMoreCatalogBooks = loadMoreCatalogBooks;
+window.toggleCatalogFilterDrawer = toggleCatalogFilterDrawer;
+window.retryCatalogFetch = retryCatalogFetch;
+window.openBookDetail = openBookDetail;
+window.closeBookDetail = closeBookDetail;
+window.toggleCardOverlay = toggleCardOverlay;
+
+// Task 4 Motion Hooks
+window.applyPageStaggerEntrance = applyPageStaggerEntrance;
+window.initShelfParallax = initShelfParallax;
+window.launchConfettiBurst = launchConfettiBurst;
+window.handlePassportBadgeClick = handlePassportBadgeClick;
+window.initBookDetail3D = initBookDetail3D;
+window.init3DCardTilt = init3DCardTilt;
 
 // Start App
 boot();

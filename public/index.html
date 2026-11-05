@@ -4,174 +4,132 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VIRAJ INTERNATIONAL SCHOOL — Digital Knowledge & Library Hub</title>
-  
-  <!-- Academic & Modern Fonts -->
+  <meta name="description" content="Official Digital Knowledge & Library Hub of Viraj International School (CBSE Kurgaon). Explore curated literature, Goosebumps series, curriculum guides, student reading passports, and daily newspapers.">
+  <meta name="theme-color" content="#1E3A8A">
+  <link rel="canonical" href="https://library.virajinternationalschool.com/">
+
+  <!-- Open Graph & WhatsApp Sharing -->
+  <meta property="og:title" content="VIRAJ INTERNATIONAL SCHOOL — Digital Knowledge & Library Hub">
+  <meta property="og:description" content="Explore thousands of curated digital books, academic resources, and literary adventures at the Viraj International School Digital Library.">
+  <meta property="og:image" content="/logo.png">
+  <meta property="og:url" content="https://library.virajinternationalschool.com/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Viraj International School Digital Library">
+  <meta property="og:locale" content="en_IN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="VIRAJ INTERNATIONAL SCHOOL — Digital Knowledge & Library Hub">
+  <meta name="twitter:description" content="Explore thousands of curated digital books and academic resources at the Viraj International School Library.">
+  <meta name="twitter:image" content="/logo.png">
+
+  <!-- PWA & Mobile Web App -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/logo.png">
+
+  <!-- Academic & Modern Fonts (Google Fonts with display=swap) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Line Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
   
   <link rel="stylesheet" href="style.css">
   <link rel="icon" type="image/png" href="logo.png">
   <link rel="icon" type="image/svg+xml" href="logo.svg">
 </head>
 <body class="theme-light">
+  <!-- Accessibility: Skip to main content link for keyboard users -->
+  <a href="#app" class="skip-link">Skip to main content</a>
 
   <!-- Main Academic Navigation Bar -->
   <header class="navbar-header" id="navbarHeader">
     <div class="nav-container">
       
       <!-- Brand Crest & Title -->
-      <div class="nav-brand" onclick="go('home')" role="button" tabindex="0" title="Viraj International School Library Home">
-        <img class="brand-crest" src="logo.png" alt="Viraj International School Crest">
+      <div class="nav-brand" onclick="go('home')" onkeydown="if(event.key==='Enter'||event.key===' ')go('home')" role="button" tabindex="0" title="Viraj International School Library Home" aria-label="Viraj International School Digital Library Home">
+        <img class="brand-crest" src="logo.png" alt="Viraj International School Crest" width="44" height="44">
         <div class="brand-info">
           <span class="brand-school">VIRAJ INTERNATIONAL SCHOOL</span>
           <span class="brand-tagline">CBSE Kurgaon • Digital Library Hub</span>
         </div>
       </div>
 
-      <!-- Desktop Navigation Links -->
+      <!-- Desktop Navigation Links (5 Main Links in Centre + More Dropdown) -->
       <nav class="nav-menu" id="navMenu">
         <button class="nav-item" data-view="home" onclick="go('home')">Home</button>
         <button class="nav-item" data-view="junior" onclick="go('junior')">Junior Wing</button>
         <button class="nav-item" data-view="secondary" onclick="go('secondary')">Secondary Wing</button>
         <button class="nav-item" data-view="biography" onclick="go('biography')">Biographies</button>
         <button class="nav-item" data-view="quiz" onclick="go('quiz')">Quiz Arena</button>
-        <button class="nav-item" data-view="news" onclick="go('news')">Newspaper</button>
         
-        <!-- More Dropdown Menu -->
+        <!-- More Dropdown Menu (Newspaper & Community Features) -->
         <div class="nav-dropdown-wrapper">
-          <button class="nav-item nav-dropdown-btn" id="moreDropdownBtn" onclick="toggleDropdown('moreDropdownMenu')">
-            More <span class="drop-arrow">▾</span>
+          <button class="nav-item nav-dropdown-btn" id="moreDropdownBtn" onclick="toggleDropdown('moreDropdownMenu')" aria-expanded="false" aria-haspopup="true">
+            <span>More</span> <span class="drop-arrow">▾</span>
           </button>
           <div class="dropdown-popover" id="moreDropdownMenu" hidden>
             <div id="moreLibrarianSection" style="display:none;">
               <button class="dropdown-item" onclick="go('admin'); closeDropdowns();" style="color:var(--gold-primary);font-weight:700;">
-                <span class="d-icon">➕</span> Add Books / Librarian Hub
+                <span class="d-icon"><i data-lucide="plus-circle" aria-hidden="true"></i></span> Add Books / Librarian Hub
               </button>
               <div class="dropdown-divider"></div>
             </div>
+            <!-- Newspaper moved from main header into More dropdown -->
+            <button class="dropdown-item" data-view="news" onclick="go('news'); closeDropdowns();">
+              <span class="d-icon"><i data-lucide="newspaper" aria-hidden="true"></i></span> Newspaper & Press
+            </button>
             <button class="dropdown-item" onclick="go('suggest'); closeDropdowns();">
-              <span class="d-icon">💡</span> Suggest a Book
+              <span class="d-icon"><i data-lucide="lightbulb" aria-hidden="true"></i></span> Suggest a Book
             </button>
             <button class="dropdown-item" onclick="go('elect'); closeDropdowns();">
-              <span class="d-icon">🗳️</span> Vote for the Next Book
+              <span class="d-icon"><i data-lucide="vote" aria-hidden="true"></i></span> Vote for the Next Book
             </button>
             <button class="dropdown-item" onclick="go('avid'); closeDropdowns();">
-              <span class="d-icon">🏆</span> Avid Reader of the Month
+              <span class="d-icon" aria-hidden="true">🏆</span> Avid Reader of the Month
             </button>
             <button class="dropdown-item" onclick="go('history'); closeDropdowns();">
-              <span class="d-icon">🕒</span> Reading History
+              <span class="d-icon"><i data-lucide="clock" aria-hidden="true"></i></span> Reading History
             </button>
             <button class="dropdown-item" onclick="go('about'); closeDropdowns();">
-              <span class="d-icon">🏛️</span> About the Library
+              <span class="d-icon"><i data-lucide="landmark" aria-hidden="true"></i></span> About the Library
             </button>
           </div>
         </div>
 
         <!-- Quick 1-Click Add Books Button (Visible to Librarian) -->
-        <button class="nav-item" id="navAdminQuickBtn" onclick="go('admin')" style="background:var(--gold-primary);color:#ffffff;font-weight:700;display:none;margin-left:4px;">
-          ➕ Add Books
+        <button class="nav-item" id="navAdminQuickBtn" onclick="go('admin')" style="background:var(--gold-btn-bg);color:var(--gold-btn-text);font-weight:700;display:none;margin-left:4px;">
+          <i data-lucide="plus" aria-hidden="true"></i> <span>Add Books</span>
         </button>
       </nav>
 
-      <!-- Global Search & Actions -->
+      <!-- Global Search, Focus Mode & Right Actions -->
       <div class="nav-actions">
         <!-- Quick Search Bar -->
         <div class="global-search-box">
-          <span class="search-glass-icon">🔍</span>
-          <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Search books, authors, topics..." oninput="handleGlobalSearch(this.value)" autocomplete="off">
+          <span class="search-glass-icon"><i data-lucide="search" aria-hidden="true"></i></span>
+          <input type="text" id="globalSearchInput" class="global-search-input" placeholder="Search books, authors..." oninput="handleGlobalSearch(this.value)" autocomplete="off" aria-label="Search Catalog">
           <div class="search-results-dropdown" id="searchResultsDropdown" hidden></div>
         </div>
 
-        <!-- Ambient Reading Sounds Studio -->
-        <div class="nav-tool-wrapper">
-          <button class="nav-tool-btn" id="ambientSoundBtn" onclick="toggleAmbientStudio()" title="Ambient Reading Sounds (Rain, Fire, Waves, Study Lounge)" aria-label="Reading Ambience">
-            <span class="tool-icon">🎧</span>
-            <div class="sound-wave-bars" id="navSoundBars">
-              <span></span><span></span><span></span><span></span>
-            </div>
-          </button>
-          
-          <!-- Ambient Sound Popover -->
-          <div class="dropdown-popover ambient-popover" id="ambientStudioPopover" hidden>
-            <div class="popover-header">
-              <div class="popover-title">
-                <span>🎧 Ambient Study Sounds</span>
-                <span class="live-pill" id="ambientLiveBadge">OFF</span>
-              </div>
-              <small>Procedural soothing focus audio generated directly in your browser</small>
-            </div>
-            <div class="ambient-sound-grid">
-              <button class="ambient-card active-ambient" data-sound="rain" onclick="AmbienceAudio.select('rain')">
-                <span class="amb-icon">🌧️</span>
-                <span class="amb-name">Cozy Rain</span>
-              </button>
-              <button class="ambient-card" data-sound="fire" onclick="AmbienceAudio.select('fire')">
-                <span class="amb-icon">🔥</span>
-                <span class="amb-name">Library Fire</span>
-              </button>
-              <button class="ambient-card" data-sound="waves" onclick="AmbienceAudio.select('waves')">
-                <span class="amb-icon">🌊</span>
-                <span class="amb-name">Ocean Flow</span>
-              </button>
-              <button class="ambient-card" data-sound="study" onclick="AmbienceAudio.select('study')">
-                <span class="amb-icon">☕</span>
-                <span class="amb-name">Study Lounge</span>
-              </button>
-            </div>
-            <div class="ambient-controls-row">
-              <div class="ambient-vol-wrap">
-                <span style="font-size:0.8rem;">🔊</span>
-                <input type="range" id="ambientVolSlider" min="0" max="100" value="45" oninput="AmbienceAudio.setVolume(this.value / 100)" class="ambient-slider" aria-label="Volume">
-              </div>
-              <button class="btn btn-sm btn-gold" id="ambientPlayBtn" onclick="AmbienceAudio.togglePlay()">▶ Start Sound</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 20-Min Reading Focus Sprint Timer -->
-        <div class="nav-tool-wrapper">
-          <button class="nav-tool-btn" id="focusTimerBtn" onclick="toggleFocusTimerWidget()" title="20-Min Reading Focus Sprint" aria-label="Reading Sprint Timer">
-            <span class="tool-icon">⏱️</span>
-            <span class="timer-countdown-badge" id="navTimerBadge" hidden>20:00</span>
-          </button>
-
-          <!-- Focus Timer Popover -->
-          <div class="dropdown-popover timer-popover" id="focusTimerPopover" hidden>
-            <div class="popover-header">
-              <div class="popover-title">
-                <span>🎯 Reading Sprint Timer</span>
-                <span class="live-pill" id="timerStatusPill">READY</span>
-              </div>
-              <small>Boost focus & earn +25 Reading Passport Points</small>
-            </div>
-            
-            <div class="timer-display-box">
-              <div class="timer-circle-wrap">
-                <svg class="timer-ring-svg" width="110" height="110">
-                  <circle class="timer-ring-bg" cx="55" cy="55" r="48"></circle>
-                  <circle class="timer-ring-progress" id="timerRingProgress" cx="55" cy="55" r="48"></circle>
-                </svg>
-                <div class="timer-digits" id="timerDigitsDisplay">20:00</div>
-              </div>
-            </div>
-
-            <div class="timer-controls-row">
-              <button class="btn btn-sm btn-gold" id="timerStartBtn" onclick="FocusTimer.toggle()">▶ Start Sprint</button>
-              <button class="btn btn-sm btn-ghost" onclick="FocusTimer.reset()">Reset</button>
-              <select id="timerPresetSelect" class="timer-preset-select" onchange="FocusTimer.setDuration(this.value)">
-                <option value="15">15 Min</option>
-                <option value="20" selected>20 Min (Recommended)</option>
-                <option value="30">30 Min</option>
-                <option value="45">45 Min</option>
-              </select>
-            </div>
-          </div>
-        </div>
+        <!-- ONE Focus Mode Button (Replaces separate audio and timer widgets in header) -->
+        <button class="nav-tool-btn focus-mode-btn" id="focusModeBtn" onclick="toggleFocusPanel()" title="Focus Mode: Ambient Sounds & Sprint Timer" aria-label="Open Focus Mode Studio">
+          <i data-lucide="sparkles" aria-hidden="true"></i>
+          <span class="focus-mode-label">Focus</span>
+          <span class="focus-live-pill" id="focusLivePill" hidden>ON</span>
+          <!-- Compatibility placeholders for existing app.js selectors -->
+          <span id="ambientSoundBtn" style="display:none;"></span>
+          <span id="focusTimerBtn" style="display:none;"></span>
+          <span id="navSoundBars" style="display:none;"></span>
+          <span id="navTimerBadge" style="display:none;"></span>
+        </button>
 
         <!-- Theme Toggle -->
         <button class="theme-toggle-btn" id="themeToggleBtn" onclick="toggleTheme()" title="Toggle Theme" aria-label="Toggle Theme">
-          <span id="themeToggleIcon">🌙</span>
+          <span id="themeToggleIcon" style="display:none;" aria-hidden="true">🌙</span>
+          <i data-lucide="moon" class="theme-icon-light" aria-hidden="true"></i>
+          <i data-lucide="sun" class="theme-icon-dark" aria-hidden="true"></i>
         </button>
 
         <!-- Guest State Actions -->
@@ -198,29 +156,29 @@
             </div>
             <div class="dropdown-divider"></div>
             <button class="dropdown-item" onclick="go('profile'); closeDropdowns();">
-              <span>👤</span> Reading Passport & Profile
+              <span class="d-icon" aria-hidden="true">👤</span> Reading Passport & Profile
             </button>
             <button class="dropdown-item" onclick="go('bookmarks'); closeDropdowns();">
-              <span>🔖</span> Saved Bookmarks
+              <span class="d-icon"><i data-lucide="bookmark" aria-hidden="true"></i></span> Saved Bookmarks
             </button>
             <button class="dropdown-item" onclick="go('history'); closeDropdowns();">
-              <span>📚</span> My Reading History
+              <span class="d-icon"><i data-lucide="book-open" aria-hidden="true"></i></span> My Reading History
             </button>
             <div id="librarianMenuSection" hidden>
               <div class="dropdown-divider"></div>
               <div class="dropdown-section-title">ADMINISTRATION</div>
               <button class="dropdown-item dropdown-admin-item" onclick="go('admin'); closeDropdowns();">
-                <span>🛡️</span> Librarian Management Hub
+                <span class="d-icon"><i data-lucide="shield" aria-hidden="true"></i></span> Librarian Management Hub
               </button>
             </div>
             <div class="dropdown-divider"></div>
             <button class="dropdown-item text-danger" onclick="logout(); closeDropdowns();">
-              <span>🚪</span> Log Out
+              <span class="d-icon"><i data-lucide="log-out" aria-hidden="true"></i></span> Log Out
             </button>
           </div>
         </div>
 
-        <!-- Mobile Hamburger Button -->
+        <!-- Mobile / Tablet Hamburger Button -->
         <button class="mobile-menu-btn" id="mobileMenuBtn" onclick="toggleMobileMenu()" aria-label="Open Navigation Menu">
           <span></span><span></span><span></span>
         </button>
@@ -228,26 +186,128 @@
 
     </div>
 
-    <!-- Mobile Drawer Navigation -->
+    <!-- Mobile / Tablet Drawer Navigation -->
     <div class="mobile-drawer" id="mobileDrawer" hidden>
       <div class="mobile-drawer-content">
-        <button class="mobile-nav-link" onclick="go('home'); toggleMobileMenu();">🏠 Home</button>
-        <button class="mobile-nav-link" onclick="go('junior'); toggleMobileMenu();">🧸 Junior Library</button>
-        <button class="mobile-nav-link" onclick="go('secondary'); toggleMobileMenu();">📚 Secondary Library</button>
-        <button class="mobile-nav-link" onclick="go('biography'); toggleMobileMenu();">👑 Biographies</button>
-        <button class="mobile-nav-link" onclick="go('quiz'); toggleMobileMenu();">🧠 Test Your Wits</button>
-        <button class="mobile-nav-link" onclick="go('news'); toggleMobileMenu();">📰 Daily Newspapers</button>
-        <button class="mobile-nav-link" onclick="go('suggest'); toggleMobileMenu();">💡 Suggest a Book</button>
-        <button class="mobile-nav-link" onclick="go('elect'); toggleMobileMenu();">🗳️ Vote for the Next Book</button>
-        <button class="mobile-nav-link" onclick="go('avid'); toggleMobileMenu();">🏆 Avid Reader of the Month</button>
-        <button class="mobile-nav-link" onclick="go('history'); toggleMobileMenu();">🕒 Reading History</button>
+        <button class="mobile-nav-link" onclick="go('home'); toggleMobileMenu();"><i data-lucide="home" aria-hidden="true"></i> Home</button>
+        <button class="mobile-nav-link" onclick="go('junior'); toggleMobileMenu();"><i data-lucide="book" aria-hidden="true"></i> Junior Library</button>
+        <button class="mobile-nav-link" onclick="go('secondary'); toggleMobileMenu();"><i data-lucide="library" aria-hidden="true"></i> Secondary Library</button>
+        <button class="mobile-nav-link" onclick="go('biography'); toggleMobileMenu();"><i data-lucide="user-check" aria-hidden="true"></i> Biographies</button>
+        <button class="mobile-nav-link" onclick="go('quiz'); toggleMobileMenu();"><span aria-hidden="true">🧠</span> Test Your Wits</button>
+        <button class="mobile-nav-link" onclick="go('news'); toggleMobileMenu();"><i data-lucide="newspaper" aria-hidden="true"></i> Daily Newspapers</button>
+        <button class="mobile-nav-link" onclick="toggleFocusPanel(true); toggleMobileMenu();"><i data-lucide="sparkles" aria-hidden="true"></i> Focus Mode Studio</button>
+        <button class="mobile-nav-link" onclick="go('suggest'); toggleMobileMenu();"><i data-lucide="lightbulb" aria-hidden="true"></i> Suggest a Book</button>
+        <button class="mobile-nav-link" onclick="go('elect'); toggleMobileMenu();"><i data-lucide="vote" aria-hidden="true"></i> Vote for the Next Book</button>
+        <button class="mobile-nav-link" onclick="go('avid'); toggleMobileMenu();"><span aria-hidden="true">🏆</span> Avid Reader of the Month</button>
+        <button class="mobile-nav-link" onclick="go('history'); toggleMobileMenu();"><i data-lucide="clock" aria-hidden="true"></i> Reading History</button>
         <div id="mobileAdminLink" hidden>
-          <button class="mobile-nav-link mobile-admin-link" onclick="go('admin'); toggleMobileMenu();">🛡️ Librarian Hub</button>
+          <button class="mobile-nav-link mobile-admin-link" onclick="go('admin'); toggleMobileMenu();"><i data-lucide="shield" aria-hidden="true"></i> Librarian Hub</button>
         </div>
-        <button class="mobile-nav-link text-danger" onclick="logout(); toggleMobileMenu();" id="mobileLogoutBtn" hidden>🚪 Log Out</button>
+        <button class="mobile-nav-link text-danger" onclick="logout(); toggleMobileMenu();" id="mobileLogoutBtn" hidden><i data-lucide="log-out" aria-hidden="true"></i> Log Out</button>
       </div>
     </div>
   </header>
+
+  <!-- Clean Focus Mode Side Panel (Drawer) -->
+  <div class="focus-panel-backdrop" id="focusPanelBackdrop" hidden onclick="toggleFocusPanel(false)"></div>
+  <aside class="focus-side-panel" id="focusSidePanel" hidden aria-label="Focus Mode Studio">
+    <div class="focus-panel-header">
+      <div class="focus-panel-title">
+        <div class="focus-title-icon"><i data-lucide="sparkles" aria-hidden="true"></i></div>
+        <div>
+          <h3>Focus Mode Studio</h3>
+          <p class="focus-panel-subtitle">Ambient study audio & reading sprint timer</p>
+        </div>
+      </div>
+      <button class="focus-panel-close-btn" onclick="toggleFocusPanel(false)" aria-label="Close Focus Mode Studio">
+        <i data-lucide="x" aria-hidden="true"></i>
+      </button>
+    </div>
+
+    <div class="focus-panel-body">
+      <!-- 20-Min Reading Focus Sprint Timer -->
+      <div class="focus-tool-card" id="focusTimerSection">
+        <div class="focus-card-header">
+          <div class="focus-card-title-group">
+            <i data-lucide="timer" class="focus-tool-icon" aria-hidden="true"></i>
+            <div>
+              <h4>Reading Sprint Timer</h4>
+              <span class="focus-card-meta">Boost focus & earn +25 points</span>
+            </div>
+          </div>
+          <span class="live-pill" id="timerStatusPill">READY</span>
+        </div>
+
+        <div class="timer-display-box">
+          <div class="timer-circle-wrap">
+            <svg class="timer-ring-svg" width="120" height="120" viewBox="0 0 120 120">
+              <circle class="timer-ring-bg" cx="60" cy="60" r="52"></circle>
+              <circle class="timer-ring-progress" id="timerRingProgress" cx="60" cy="60" r="52"></circle>
+            </svg>
+            <div class="timer-digits" id="timerDigitsDisplay">20:00</div>
+          </div>
+        </div>
+
+        <div class="timer-controls-row">
+          <button class="btn btn-gold" id="timerStartBtn" onclick="FocusTimer.toggle()">
+            <i data-lucide="play" aria-hidden="true"></i> <span>Start Sprint</span>
+          </button>
+          <button class="btn btn-ghost" onclick="FocusTimer.reset()">
+            <i data-lucide="rotate-ccw" aria-hidden="true"></i> <span>Reset</span>
+          </button>
+          <select id="timerPresetSelect" class="timer-preset-select" onchange="FocusTimer.setDuration(this.value)" aria-label="Sprint Duration">
+            <option value="15">15 Min</option>
+            <option value="20" selected>20 Min (Recommended)</option>
+            <option value="30">30 Min</option>
+            <option value="45">45 Min</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Ambient Reading Sounds Studio -->
+      <div class="focus-tool-card" id="ambientStudioSection">
+        <div class="focus-card-header">
+          <div class="focus-card-title-group">
+            <i data-lucide="headphones" class="focus-tool-icon" aria-hidden="true"></i>
+            <div>
+              <h4>Ambient Study Audio</h4>
+              <span class="focus-card-meta">In-browser soothing audio</span>
+            </div>
+          </div>
+          <span class="live-pill" id="ambientLiveBadge">OFF</span>
+        </div>
+
+        <div class="ambient-sound-grid">
+          <button class="ambient-card active-ambient" data-sound="rain" onclick="AmbienceAudio.select('rain')">
+            <span class="amb-icon"><i data-lucide="cloud-rain" aria-hidden="true"></i></span>
+            <span class="amb-name">Cozy Rain</span>
+          </button>
+          <button class="ambient-card" data-sound="fire" onclick="AmbienceAudio.select('fire')">
+            <span class="amb-icon"><i data-lucide="flame" aria-hidden="true"></i></span>
+            <span class="amb-name">Library Fire</span>
+          </button>
+          <button class="ambient-card" data-sound="waves" onclick="AmbienceAudio.select('waves')">
+            <span class="amb-icon"><i data-lucide="waves" aria-hidden="true"></i></span>
+            <span class="amb-name">Ocean Flow</span>
+          </button>
+          <button class="ambient-card" data-sound="study" onclick="AmbienceAudio.select('study')">
+            <span class="amb-icon"><i data-lucide="coffee" aria-hidden="true"></i></span>
+            <span class="amb-name">Study Lounge</span>
+          </button>
+        </div>
+
+        <div class="ambient-controls-row">
+          <div class="ambient-vol-wrap">
+            <i data-lucide="volume-2" aria-hidden="true" style="font-size:0.95rem;"></i>
+            <input type="range" id="ambientVolSlider" min="0" max="100" value="45" oninput="AmbienceAudio.setVolume(this.value / 100)" class="ambient-slider" aria-label="Volume Slider">
+          </div>
+          <button class="btn btn-gold" id="ambientPlayBtn" onclick="AmbienceAudio.togglePlay()">
+            <i data-lucide="play" aria-hidden="true"></i> <span>Start Sound</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </aside>
 
   <!-- Dynamic Application Main Container -->
   <main id="app" class="site-main"></main>
@@ -257,18 +317,18 @@
     <div class="modal-card modal-card-reader" id="readerModalCard">
       <div class="modal-head">
         <div class="modal-title-box">
-          <span class="modal-icon" id="previewIcon">📖</span>
+          <span class="modal-icon" id="previewIcon"><i data-lucide="book-open" aria-hidden="true"></i></span>
           <div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <h3 id="previewTitle">Digital Resource Reader</h3>
-              <span id="previewRentalBadge" class="meta-chip meta-chip-hot" style="display:none;background:var(--status-success-bg);color:var(--status-success);border-color:var(--status-success);font-size:0.75rem;">🟢 Borrowed (14-Day Free School Loan)</span>
+              <span id="previewRentalBadge" class="meta-chip meta-chip-hot" style="display:none;background:var(--status-success-bg);color:var(--status-success);border-color:var(--status-success);font-size:0.75rem;">Borrowed (14-Day Free School Loan)</span>
             </div>
             <span class="modal-sub-meta" id="previewMeta">Viraj International School Digital Repository • In-Site Reader</span>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <button id="theaterToggleBtn" class="modal-ctrl-btn" type="button" onclick="toggleReaderTheater()" aria-label="Toggle Fullscreen Reader" title="Toggle Fullscreen Theater View">⛶</button>
-          <button id="closeModalBtn" class="modal-close-btn" type="button" onclick="closePreview()" aria-label="Close Preview" title="Close Reader">✕</button>
+          <button id="theaterToggleBtn" class="modal-ctrl-btn" type="button" onclick="toggleReaderTheater()" aria-label="Toggle Fullscreen Reader" title="Toggle Fullscreen Theater View"><i data-lucide="maximize-2" aria-hidden="true"></i></button>
+          <button id="closeModalBtn" class="modal-close-btn" type="button" onclick="closePreview()" aria-label="Close Preview" title="Close Reader"><i data-lucide="x" aria-hidden="true"></i></button>
         </div>
       </div>
       
@@ -276,23 +336,23 @@
       
       <div class="modal-foot">
         <div id="previewFootActions" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;"></div>
-        <button id="footCloseBtn" class="btn btn-ghost" type="button" onclick="closePreview()">Close Book ✕</button>
+        <button id="footCloseBtn" class="btn btn-ghost" type="button" onclick="closePreview()"><span>Close Book</span> <i data-lucide="x" aria-hidden="true"></i></button>
       </div>
     </div>
   </div>
 
-  <!-- 🎲 Mystery Book Discoverer / Surprise Me Modal -->
+  <!-- Mystery Book Discoverer / Surprise Me Modal -->
   <div id="surpriseModal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card-surprise">
       <div class="modal-head">
         <div class="modal-title-box">
-          <span class="modal-icon">🎲</span>
+          <span class="modal-icon"><i data-lucide="dices" aria-hidden="true"></i></span>
           <div>
             <h3>Book Fortune Wheel</h3>
             <span class="modal-sub-meta">Let the Library pick your next great adventure</span>
           </div>
         </div>
-        <button class="modal-close-btn" onclick="closeSurpriseModal()" aria-label="Close">✕</button>
+        <button class="modal-close-btn" onclick="closeSurpriseModal()" aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button>
       </div>
 
       <div class="modal-body" id="surpriseModalBody">
@@ -301,18 +361,18 @@
     </div>
   </div>
 
-  <!-- ⚡ Quick Peek / Book Synopsis Modal -->
+  <!-- Quick Peek / Book Synopsis Modal -->
   <div id="quickPeekModal" class="modal-backdrop" hidden>
     <div class="modal-card modal-card-peek">
       <div class="modal-head">
         <div class="modal-title-box">
-          <span class="modal-icon" id="peekIcon">⚡</span>
+          <span class="modal-icon" id="peekIcon"><i data-lucide="zap" aria-hidden="true"></i></span>
           <div>
             <h3 id="peekTitle">Book Overview</h3>
             <span class="modal-sub-meta" id="peekMeta">Quick Synopsis & Reader Specs</span>
           </div>
         </div>
-        <button class="modal-close-btn" onclick="closeQuickPeek()" aria-label="Close">✕</button>
+        <button class="modal-close-btn" onclick="closeQuickPeek()" aria-label="Close"><i data-lucide="x" aria-hidden="true"></i></button>
       </div>
 
       <div class="modal-body" id="peekModalBody">
@@ -375,18 +435,18 @@
         <!-- Contact & Accreditation -->
         <div class="footer-col footer-col-contact">
           <h5 class="footer-heading">Campus & Library Desk</h5>
-          <p class="footer-contact-item">🏫 <strong>Viraj International School</strong> (CBSE)</p>
-          <p class="footer-contact-item">📍 Survey No.27, Boisar - Tarapur Rd, Near Kurgaon Grampanchayat Office, Kurgaon, Boisar, Maharashtra 401502</p>
-          <p class="footer-contact-item">📞 <a href="tel:08554998833" class="footer-ext-link">085549 98833</a></p>
-          <p class="footer-contact-item">🌐 <a href="https://www.virajinternationalschool.com/" target="_blank" rel="noopener" class="footer-ext-link">virajinternationalschool.com ↗</a></p>
-          <p class="footer-contact-item">⏰ Mon – Fri: 8:00 AM – 4:00 PM<br>&nbsp;&nbsp;&nbsp;&nbsp;Sat: 8:00 AM – 2:00 PM (Sun Closed)</p>
+          <p class="footer-contact-item"><i data-lucide="graduation-cap" class="footer-inline-icon" aria-hidden="true"></i> <strong>Viraj International School</strong> (CBSE)</p>
+          <p class="footer-contact-item"><i data-lucide="map-pin" class="footer-inline-icon" aria-hidden="true"></i> Survey No.27, Boisar - Tarapur Rd, Near Kurgaon Grampanchayat Office, Kurgaon, Boisar, Maharashtra 401502</p>
+          <p class="footer-contact-item"><i data-lucide="phone" class="footer-inline-icon" aria-hidden="true"></i> <a href="tel:08554998833" class="footer-ext-link">085549 98833</a></p>
+          <p class="footer-contact-item"><i data-lucide="globe" class="footer-inline-icon" aria-hidden="true"></i> <a href="https://www.virajinternationalschool.com/" target="_blank" rel="noopener" class="footer-ext-link">virajinternationalschool.com ↗</a></p>
+          <p class="footer-contact-item"><i data-lucide="clock" class="footer-inline-icon" aria-hidden="true"></i> Mon – Fri: 8:00 AM – 4:00 PM<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Sat: 8:00 AM – 2:00 PM (Sun Closed)</p>
           <div style="margin-top: 8px;">
-            <a href="https://www.google.com/search?q=viraj+international+school+address&ludocid=6206948811688517609" target="_blank" rel="noopener" class="btn btn-xs btn-gold" style="display:inline-flex;align-items:center;gap:5px;font-size:0.75rem;padding:4px 10px;text-decoration:none;">
-              🧭 Get Directions (30 mins)
+            <a href="https://www.google.com/search?q=viraj+international+school+address&ludocid=6206948811688517609" target="_blank" rel="noopener" class="btn btn-xs btn-gold" style="display:inline-flex;align-items:center;gap:6px;font-size:0.75rem;padding:6px 12px;text-decoration:none;">
+              <i data-lucide="navigation" aria-hidden="true"></i> <span>Get Directions (30 mins)</span>
             </a>
           </div>
           <div class="footer-safe-badge" style="margin-top: 10px;">
-            <span>🛡️ Safe Student Digital Learning Environment</span>
+            <i data-lucide="shield-check" aria-hidden="true"></i> <span>Safe Student Digital Learning Environment</span>
           </div>
         </div>
       </div>
@@ -394,16 +454,43 @@
       <div class="footer-bottom">
         <p>© 2026 Viraj International School. All Rights Reserved. Digital Knowledge & Library Hub.</p>
         <div class="footer-legal">
-          <a href="javascript:void(0)" onclick="go('about')">Privacy Policy</a>
+          <a href="javascript:void(0)" onclick="go('privacy')">Privacy Policy</a>
           <span>•</span>
-          <a href="javascript:void(0)" onclick="go('about')">Terms of Use</a>
+          <a href="javascript:void(0)" onclick="go('terms')">Terms of Use</a>
           <span>•</span>
-          <a href="javascript:void(0)" onclick="go('about')">Academic Ethics</a>
+          <a href="javascript:void(0)" onclick="go('ethics')">Academic Ethics</a>
         </div>
       </div>
     </div>
   </footer>
 
+  <!-- Lucide Icon Initializer & Auto-refresh -->
+  <script>
+    function refreshLucideIcons() {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+      }
+    }
+    document.addEventListener('DOMContentLoaded', refreshLucideIcons);
+    window.addEventListener('load', refreshLucideIcons);
+    const appEl = document.getElementById('app');
+    if (appEl && window.MutationObserver) {
+      new MutationObserver(() => {
+        refreshLucideIcons();
+      }).observe(appEl, { childList: true, subtree: true });
+    }
+
+    // Register Progressive Web App (PWA) Service Worker for Tablet & Offline Access
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.warn('PWA service worker registration warning:', err);
+        });
+      });
+    }
+  </script>
+  <!-- GSAP CDN for Stagger & Smooth Transitions -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
